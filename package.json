@@ -1,0 +1,28 @@
+{
+  "name": "robin-mcp",
+  "version": "1.0.0",
+  "description": "Personal MCP server - knowledge base, API gateway, and writings hub",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev:stdio": "tsx src/stdio.ts",
+    "dev:http": "tsx src/http.ts",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/stdio.js",
+    "start:stdio": "node dist/stdio.js",
+    "start:http": "node dist/http.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^5.2.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}
