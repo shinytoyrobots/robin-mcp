@@ -11,6 +11,8 @@ export const config = {
   rssFeedUrl: process.env.RSS_FEED_URL || "",
   linkedinUrl: process.env.LINKEDIN_URL || "",
   githubToken: process.env.GITHUB_TOKEN || "",
+  linearApiKey: process.env.LINEAR_API_KEY || "",
+  vaultRepo: process.env.VAULT_REPO || "",
   httpPort: parseInt(process.env.HTTP_PORT || "3001", 10),
   authToken: process.env.AUTH_TOKEN || "",
 };

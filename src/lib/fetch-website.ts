@@ -85,6 +85,67 @@ export async function fetchRssFeed(url: string): Promise<string> {
   }
 }
 
+/**
+ * Fetch a Substack section or tag page and extract post listings.
+ * Works for /s/section-name and /t/tag-name URLs.
+ */
+export async function fetchSubstackListing(url: string, label: string): Promise<string> {
+  if (!url) {
+    return `No URL configured for ${label}.`;
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return `Failed to fetch ${url}: ${response.status} ${response.statusText}`;
+    }
+
+    const html = await response.text();
+
+    // Extract post links and titles from the listing page
+    const posts: Array<{ title: string; url: string; description: string }> = [];
+    const seen = new Set<string>();
+
+    // Substack renders post cards with links to /p/slug
+    const linkRegex = /href="(https?:\/\/www\.robin-cannon\.com\/p\/[^"]+)"/g;
+    let match: RegExpExecArray | null;
+    while ((match = linkRegex.exec(html)) !== null) {
+      const postUrl = match[1];
+      if (seen.has(postUrl)) continue;
+      seen.add(postUrl);
+
+      // Try to find the title near this link - look for nearby text content
+      const idx = match.index;
+      const surrounding = html.slice(Math.max(0, idx - 500), idx + 500);
+      const titleMatch = surrounding.match(/<h[123][^>]*>([^<]+)<\/h[123]>/i)
+        || surrounding.match(/class="[^"]*post-preview-title[^"]*"[^>]*>([^<]+)</i);
+      const descMatch = surrounding.match(/class="[^"]*subtitle[^"]*"[^>]*>([^<]+)/i)
+        || surrounding.match(/<p[^>]*>([^<]{10,200})<\/p>/i);
+
+      posts.push({
+        title: titleMatch ? titleMatch[1].trim() : postUrl.split("/p/")[1].replace(/-/g, " "),
+        url: postUrl,
+        description: descMatch ? stripHtml(descMatch[1]).slice(0, 200) : "",
+      });
+    }
+
+    if (posts.length === 0) {
+      return `No posts found at ${url}. The page may have a different structure.`;
+    }
+
+    const lines = posts.map((p) => {
+      let line = `## ${p.title}\nLink: ${p.url}`;
+      if (p.description) line += `\n${p.description}`;
+      return line;
+    });
+
+    return `# ${label} (${posts.length} posts)\n\nSource: ${url}\n\n${lines.join("\n\n---\n\n")}`;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error fetching ${url}: ${message}`;
+  }
+}
+
 function extractTag(xml: string, tag: string): string {
   const match = xml.match(
     new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, "i")
