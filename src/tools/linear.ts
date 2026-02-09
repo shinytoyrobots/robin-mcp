@@ -29,7 +29,7 @@ function formatError(errors: Array<{ message: string }> | undefined): string | n
   return errors.map((e) => e.message).join(", ");
 }
 
-export function registerLinearTools(server: McpServer): void {
+export function registerLinearTools(server: McpServer, readOnly = false): void {
   if (!config.linearApiKey) return;
 
   // Resource: teams overview
@@ -245,7 +245,7 @@ export function registerLinearTools(server: McpServer): void {
   );
 
   // Tool: create an issue
-  server.tool(
+  if (!readOnly) server.tool(
     "linear-create-issue",
     "Create a new Linear issue",
     {

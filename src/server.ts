@@ -8,19 +8,21 @@ import { registerSourceTools } from "./tools/sources.js";
 import { registerWritingsResources } from "./resources/writings.js";
 import { registerKnowledgeBaseResources } from "./resources/knowledge-base.js";
 
-export function createServer(): McpServer {
+export function createServer(options?: { readOnly?: boolean }): McpServer {
+  const readOnly = options?.readOnly ?? false;
+
   const server = new McpServer({
     name: "robin-mcp",
     version: "1.0.0",
   });
 
   // Register tools
-  registerNoteTools(server);
-  registerBookmarkTools(server);
+  registerNoteTools(server, readOnly);
+  registerBookmarkTools(server, readOnly);
   registerApiGatewayTools(server);
   registerVaultTools(server);
-  registerLinearTools(server);
-  registerSourceTools(server);
+  registerLinearTools(server, readOnly);
+  registerSourceTools(server, readOnly);
 
   // Register resources
   registerWritingsResources(server);

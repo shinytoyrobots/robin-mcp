@@ -2,8 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getDb } from "../db.js";
 
-export function registerBookmarkTools(server: McpServer): void {
-  server.tool(
+export function registerBookmarkTools(server: McpServer, readOnly = false): void {
+  if (!readOnly) server.tool(
     "save-bookmark",
     "Save a URL as a bookmark with title, description, and tags",
     {
@@ -118,7 +118,7 @@ export function registerBookmarkTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  if (!readOnly) server.tool(
     "delete-bookmark",
     "Delete a bookmark by its ID",
     {

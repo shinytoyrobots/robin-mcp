@@ -2,40 +2,42 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getDb } from "../db.js";
 
-export function registerNoteTools(server: McpServer): void {
-  server.tool(
-    "create-note",
-    "Create a new note with title, content, and optional tags",
-    {
-      title: z.string().describe("Note title"),
-      content: z.string().describe("Note content (markdown supported)"),
-      tags: z
-        .string()
-        .optional()
-        .describe("Comma-separated tags, e.g. 'javascript,react,notes'"),
-    },
-    async ({ title, content, tags }) => {
-      const db = getDb();
-      const result = db
-        .prepare(
-          "INSERT INTO notes (title, content, tags) VALUES (?, ?, ?)"
-        )
-        .run(title, content, tags || "");
+export function registerNoteTools(server: McpServer, readOnly = false): void {
+  if (!readOnly) {
+    server.tool(
+      "create-note",
+      "Create a new note with title, content, and optional tags",
+      {
+        title: z.string().describe("Note title"),
+        content: z.string().describe("Note content (markdown supported)"),
+        tags: z
+          .string()
+          .optional()
+          .describe("Comma-separated tags, e.g. 'javascript,react,notes'"),
+      },
+      async ({ title, content, tags }) => {
+        const db = getDb();
+        const result = db
+          .prepare(
+            "INSERT INTO notes (title, content, tags) VALUES (?, ?, ?)"
+          )
+          .run(title, content, tags || "");
 
-      const note = db
-        .prepare("SELECT * FROM notes WHERE id = ?")
-        .get(result.lastInsertRowid) as Record<string, unknown>;
+        const note = db
+          .prepare("SELECT * FROM notes WHERE id = ?")
+          .get(result.lastInsertRowid) as Record<string, unknown>;
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Note created (id: ${note.id}):\n\nTitle: ${note.title}\nTags: ${note.tags || "(none)"}\nCreated: ${note.created_at}\n\n${note.content}`,
-          },
-        ],
-      };
-    }
-  );
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Note created (id: ${note.id}):\n\nTitle: ${note.title}\nTags: ${note.tags || "(none)"}\nCreated: ${note.created_at}\n\n${note.content}`,
+            },
+          ],
+        };
+      }
+    );
+  }
 
   server.tool(
     "search-notes",
@@ -131,7 +133,7 @@ export function registerNoteTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  if (!readOnly) server.tool(
     "update-note",
     "Update an existing note's title, content, or tags",
     {
@@ -174,7 +176,7 @@ export function registerNoteTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  if (!readOnly) server.tool(
     "delete-note",
     "Delete a note by its ID",
     {

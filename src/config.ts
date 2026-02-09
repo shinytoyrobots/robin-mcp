@@ -15,4 +15,5 @@ export const config = {
   vaultRepo: process.env.VAULT_REPO || "",
   httpPort: parseInt(process.env.HTTP_PORT || "3001", 10),
   authToken: process.env.AUTH_TOKEN || "",
+  readonlyToken: process.env.READONLY_TOKEN || "",
 };

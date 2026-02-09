@@ -18,7 +18,7 @@ interface SourceRule {
   reason: string;
 }
 
-export function registerSourceTools(server: McpServer): void {
+export function registerSourceTools(server: McpServer, readOnly = false): void {
   // Resource: full source routing guide for Claude to consult
   server.resource(
     "source-routing",
@@ -164,7 +164,7 @@ export function registerSourceTools(server: McpServer): void {
   );
 
   // Tool: add or update a routing rule
-  server.tool(
+  if (!readOnly) server.tool(
     "set-source-rule",
     "Add or update a contextual routing rule for a source",
     {
@@ -211,7 +211,7 @@ export function registerSourceTools(server: McpServer): void {
   );
 
   // Tool: register a new source
-  server.tool(
+  if (!readOnly) server.tool(
     "register-source",
     "Register a new context source with its tools and resources",
     {
