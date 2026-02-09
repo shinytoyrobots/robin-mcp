@@ -7,8 +7,9 @@ import { registerLinearTools } from "./tools/linear.js";
 import { registerSourceTools } from "./tools/sources.js";
 import { registerWritingsResources } from "./resources/writings.js";
 import { registerKnowledgeBaseResources } from "./resources/knowledge-base.js";
+import { getAdapterRegistry } from "./adapters/registry.js";
 
-export function createServer(options?: { readOnly?: boolean }): McpServer {
+export async function createServer(options?: { readOnly?: boolean }): Promise<McpServer> {
   const readOnly = options?.readOnly ?? false;
 
   const server = new McpServer({
@@ -16,7 +17,7 @@ export function createServer(options?: { readOnly?: boolean }): McpServer {
     version: "1.0.0",
   });
 
-  // Register tools
+  // Register native tools
   registerNoteTools(server, readOnly);
   registerBookmarkTools(server, readOnly);
   registerApiGatewayTools(server);
@@ -24,9 +25,14 @@ export function createServer(options?: { readOnly?: boolean }): McpServer {
   registerLinearTools(server, readOnly);
   registerSourceTools(server, readOnly);
 
-  // Register resources
+  // Register native resources
   registerWritingsResources(server);
   registerKnowledgeBaseResources(server);
+
+  // Register adapter tools and resources
+  const registry = getAdapterRegistry();
+  await registry.ensureInitialized();
+  registry.registerOnServer(server, readOnly);
 
   return server;
 }

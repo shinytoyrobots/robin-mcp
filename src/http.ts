@@ -102,7 +102,7 @@ app.all("/mcp", async (req, res) => {
         }
       };
 
-      const server = createServer({ readOnly: req.readOnly });
+      const server = await createServer({ readOnly: req.readOnly });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;

@@ -4,7 +4,7 @@ import { createServer } from "./server.js";
 // Never write to stdout - it corrupts the MCP protocol.
 // Use console.error for all logging.
 
-const server = createServer();
+const server = await createServer();
 const transport = new StdioServerTransport();
 
 await server.connect(transport);

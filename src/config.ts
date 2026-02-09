@@ -16,4 +16,13 @@ export const config = {
   httpPort: parseInt(process.env.HTTP_PORT || "3001", 10),
   authToken: process.env.AUTH_TOKEN || "",
   readonlyToken: process.env.READONLY_TOKEN || "",
+
+  // Google Workspace adapter (stdio via google-mcp-server)
+  googleMcpCommand: process.env.GOOGLE_MCP_COMMAND || "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+
+  // Toby adapter (HTTP, for later)
+  tobyMcpUrl: process.env.TOBY_MCP_URL || "",
+  tobyMcpToken: process.env.TOBY_MCP_TOKEN || "",
 };
