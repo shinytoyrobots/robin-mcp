@@ -23,6 +23,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /usr/local/bin/google-mcp-server /usr/local/bin/google-mcp-server
+COPY entrypoint.sh ./entrypoint.sh
 
 EXPOSE 3001
-CMD ["node", "dist/http.js"]
+CMD ["./entrypoint.sh"]

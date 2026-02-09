@@ -108,10 +108,15 @@ export class AdapterRegistry {
 
   private syncSourcesToDb(): void {
     const db = getDb();
-    const upsert = db.prepare(
+    const upsertSource = db.prepare(
       `INSERT INTO sources (id, name, description, tools, resources)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET name = ?, description = ?, tools = ?, resources = ?`,
+    );
+    const upsertRule = db.prepare(
+      `INSERT INTO source_rules (context, source_id, priority, reason)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(context, source_id) DO UPDATE SET priority = ?, reason = ?`,
     );
 
     for (const adapter of this.adapters) {
@@ -126,7 +131,7 @@ export class AdapterRegistry {
         .map((r) => `robin://adapter/${adapter.config.id}/${r.uri}`)
         .join(",");
 
-      upsert.run(
+      upsertSource.run(
         adapter.config.id,
         adapter.config.name,
         adapter.config.description,
@@ -137,6 +142,43 @@ export class AdapterRegistry {
         toolNames,
         resourceUris,
       );
+    }
+
+    // Register per-account logical sources for Google adapter
+    if (this.adapters.some((a) => a.config.id === "gdocs" && a.config.enabled)) {
+      const gdocs = this.adapters.find((a) => a.config.id === "gdocs")!;
+      const tools = gdocs.getTools();
+      const prefix = gdocs.config.prefix;
+      const toolNames = tools.map((t) => `${prefix}${t.name}`).join(",");
+
+      upsertSource.run(
+        "gdocs-work",
+        "Google Workspace (Work)",
+        "Google Docs & Drive for robin@knapsack.cloud. Use account parameter 'robin@knapsack.cloud' with gdocs-* tools. Contains Knapsack work docs, meeting notes, and professional content.",
+        toolNames, "",
+        "Google Workspace (Work)",
+        "Google Docs & Drive for robin@knapsack.cloud. Use account parameter 'robin@knapsack.cloud' with gdocs-* tools. Contains Knapsack work docs, meeting notes, and professional content.",
+        toolNames, "",
+      );
+
+      upsertSource.run(
+        "gdocs-personal",
+        "Google Workspace (Personal)",
+        "Google Docs & Drive for robin.cannon@gmail.com. Use account parameter 'robin.cannon@gmail.com' with gdocs-* tools. Contains personal docs, creative writing drafts, and mixed-use content.",
+        toolNames, "",
+        "Google Workspace (Personal)",
+        "Google Docs & Drive for robin.cannon@gmail.com. Use account parameter 'robin.cannon@gmail.com' with gdocs-* tools. Contains personal docs, creative writing drafts, and mixed-use content.",
+        toolNames, "",
+      );
+
+      // Routing rules for work account
+      upsertRule.run("project-management", "gdocs-work", 2, "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)", 2, "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
+      upsertRule.run("code", "gdocs-work", 4, "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)", 4, "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)");
+
+      // Routing rules for personal account
+      upsertRule.run("creative-writing", "gdocs-personal", 4, "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)", 4, "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)");
+      upsertRule.run("research", "gdocs-personal", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)");
+      upsertRule.run("general", "gdocs-personal", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)");
     }
   }
 }
