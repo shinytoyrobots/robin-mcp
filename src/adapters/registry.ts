@@ -380,6 +380,7 @@ export function getAdapterRegistry(): AdapterRegistry {
         headers: config.digestPipelineToken
           ? { Authorization: `Bearer ${config.digestPipelineToken}` }
           : undefined,
+        toolFilter: ["list-digests", "get-digest", "search-digests"],
       }),
     );
   }

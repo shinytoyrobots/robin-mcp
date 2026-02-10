@@ -3,7 +3,37 @@ import { config } from "../config.js";
 import { fetchWebsiteContent, fetchRssFeed, fetchSubstackListing } from "../lib/fetch-website.js";
 import { getLinkedInResource } from "../lib/fetch-linkedin.js";
 
+const WRITINGS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function cachedFetch(fetcher: () => Promise<string>, ttlMs = WRITINGS_CACHE_TTL_MS) {
+  let cached: string | null = null;
+  let cachedAt = 0;
+  return async (): Promise<string> => {
+    const now = Date.now();
+    if (!cached || now - cachedAt > ttlMs) {
+      cached = await fetcher();
+      cachedAt = now;
+    }
+    return cached;
+  };
+}
+
 export function registerWritingsResources(server: McpServer): void {
+  const getWebsite = cachedFetch(() => fetchWebsiteContent(config.websiteUrl));
+  const getBlogPosts = cachedFetch(() => fetchRssFeed(config.rssFeedUrl));
+  const getShinyToyRobots = cachedFetch(() =>
+    fetchSubstackListing("https://www.robin-cannon.com/s/shiny-toy-robots", "Shiny Toy Robots")
+  );
+  const getAlternateFrequencies = cachedFetch(() =>
+    fetchSubstackListing("https://www.robin-cannon.com/p/alternate-frequencies", "Alternate Frequencies")
+  );
+  const getStaticDrift = cachedFetch(() =>
+    fetchSubstackListing("https://www.robin-cannon.com/t/staticdrift", "Static Drift (tagged posts)")
+  );
+  const getTomCannon = cachedFetch(() =>
+    fetchWebsiteContent("https://www.liverpool.ac.uk/people/tom-cannon/research-outputs")
+  );
+
   server.resource(
     "personal-website",
     "robin://writings/website",
@@ -13,7 +43,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchWebsiteContent(config.websiteUrl),
+          text: await getWebsite(),
         },
       ],
     })
@@ -28,7 +58,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchRssFeed(config.rssFeedUrl),
+          text: await getBlogPosts(),
         },
       ],
     })
@@ -43,10 +73,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchSubstackListing(
-            "https://www.robin-cannon.com/s/shiny-toy-robots",
-            "Shiny Toy Robots"
-          ),
+          text: await getShinyToyRobots(),
         },
       ],
     })
@@ -61,10 +88,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchSubstackListing(
-            "https://www.robin-cannon.com/p/alternate-frequencies",
-            "Alternate Frequencies"
-          ),
+          text: await getAlternateFrequencies(),
         },
       ],
     })
@@ -79,10 +103,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchSubstackListing(
-            "https://www.robin-cannon.com/t/staticdrift",
-            "Static Drift (tagged posts)"
-          ),
+          text: await getStaticDrift(),
         },
       ],
     })
@@ -112,7 +133,7 @@ export function registerWritingsResources(server: McpServer): void {
         {
           uri: uri.toString(),
           mimeType: "text/plain",
-          text: await fetchWebsiteContent("https://www.liverpool.ac.uk/people/tom-cannon/research-outputs"),
+          text: await getTomCannon(),
         },
       ],
     })

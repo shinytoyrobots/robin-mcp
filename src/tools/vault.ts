@@ -42,22 +42,32 @@ async function listTree(dirPath: string): Promise<string> {
   return lines.join("\n");
 }
 
+const VAULT_TREE_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+let cachedVaultTree: string | null = null;
+let vaultTreeCachedAt = 0;
+
+const MAX_VAULT_FILE_SIZE = 50_000;
+
 export function registerVaultTools(server: McpServer): void {
   if (!config.vaultRepo || !config.githubToken) return;
 
-  // Resource: vault structure overview
+  // Resource: vault structure overview (cached)
   server.resource(
     "creative-vault",
     "robin://vault/structure",
     { description: `File structure of the ${config.vaultRepo} creative vault` },
     async (uri) => {
-      const tree = await listTree("");
+      const now = Date.now();
+      if (!cachedVaultTree || now - vaultTreeCachedAt > VAULT_TREE_CACHE_TTL_MS) {
+        cachedVaultTree = await listTree("");
+        vaultTreeCachedAt = now;
+      }
       return {
         contents: [
           {
             uri: uri.toString(),
             mimeType: "text/plain",
-            text: `# Creative Vault: ${config.vaultRepo}\n\n${tree}`,
+            text: `# Creative Vault: ${config.vaultRepo}\n\n${cachedVaultTree}`,
           },
         ],
       };
@@ -111,7 +121,10 @@ export function registerVaultTools(server: McpServer): void {
         };
       }
 
-      const text = Buffer.from(data.content, "base64").toString("utf-8");
+      let text = Buffer.from(data.content, "base64").toString("utf-8");
+      if (text.length > MAX_VAULT_FILE_SIZE) {
+        text = text.slice(0, MAX_VAULT_FILE_SIZE) + "\n\n...(truncated, file exceeds 50KB)";
+      }
 
       return {
         content: [
