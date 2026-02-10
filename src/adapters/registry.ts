@@ -232,6 +232,12 @@ export class AdapterRegistry {
       ensureRule("general", "notion-personal", "Personal Notion for todos, scheduling, personal projects, and general notes");
       ensureRule("personal-brand", "notion-personal", "Personal Notion may contain content planning and personal project notes");
     }
+
+    // Digest pipeline routing rules
+    if (this.adapters.some((a) => a.config.id === "digest" && a.config.enabled)) {
+      ensureRule("research", "digest", "Content digests provide curated insights from PM and industry blogs");
+      ensureRule("general", "digest", "Content digests may contain relevant curated knowledge snippets");
+    }
   }
 }
 
@@ -354,6 +360,25 @@ export function getAdapterRegistry(): AdapterRegistry {
         url: config.tobyMcpUrl,
         headers: config.tobyMcpToken
           ? { Authorization: `Bearer ${config.tobyMcpToken}` }
+          : undefined,
+      }),
+    );
+  }
+
+  // Digest pipeline adapter (HTTP)
+  if (config.digestPipelineUrl) {
+    registryInstance.addAdapter(
+      new McpProxyAdapter({
+        id: "digest",
+        name: "Content Digests",
+        prefix: "digest-",
+        type: "mcp-proxy",
+        transport: "http",
+        description: "Curated content digests from blog pipelines",
+        enabled: true,
+        url: config.digestPipelineUrl,
+        headers: config.digestPipelineToken
+          ? { Authorization: `Bearer ${config.digestPipelineToken}` }
           : undefined,
       }),
     );

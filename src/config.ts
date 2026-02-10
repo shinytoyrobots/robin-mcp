@@ -31,6 +31,10 @@ export const config = {
   tobyMcpUrl: process.env.TOBY_MCP_URL || "",
   tobyMcpToken: process.env.TOBY_MCP_TOKEN || "",
 
+  // Digest pipeline adapter (HTTP)
+  digestPipelineUrl: process.env.DIGEST_PIPELINE_URL || "",
+  digestPipelineToken: process.env.DIGEST_PIPELINE_TOKEN || "",
+
   // Dashboard
   adminEmail: process.env.DASHBOARD_ADMIN_EMAIL || "robin.cannon@gmail.com",
   analyticsRetentionDays: parseInt(process.env.ANALYTICS_RETENTION_DAYS || "90", 10),
