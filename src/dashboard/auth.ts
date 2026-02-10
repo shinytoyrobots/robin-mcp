@@ -36,9 +36,9 @@ export function dashboardAuth(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  // Cloudflare Access (read-only)
+  // Cloudflare Access — full access for admin email, read-only for everyone else
   if (cfAccess) {
-    req.dashboardAccess = "readonly";
+    req.dashboardAccess = cfAccess === config.adminEmail ? "full" : "readonly";
     next();
     return;
   }
