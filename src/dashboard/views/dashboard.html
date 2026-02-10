@@ -201,15 +201,17 @@ function destroyAllCharts() {
   }
 }
 
-// Replace a chart container with a fresh DOM node — removes all
-// residual state (ResizeObservers, inline styles, event listeners)
-function freshContainer(id) {
-  const old = document.getElementById(id);
-  if (!old) return;
-  const el = document.createElement('div');
-  el.id = old.id;
-  el.className = old.className;
-  old.parentNode.replaceChild(el, old);
+// Try to update an existing chart's data in place (no destroy/create).
+// Returns true if successful, false if chart needs to be recreated.
+function updateChartData(key, newData) {
+  const chart = chartInstances.get(key);
+  if (!chart) return false;
+  try {
+    chart.model.setData(newData);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function loadStats() {
@@ -240,11 +242,21 @@ async function loadStats() {
 }
 
 function renderGauge(rate) {
+  if (rate == null) {
+    destroyChart('gauge');
+    document.getElementById('successGauge').innerHTML = '';
+    return;
+  }
+
+  const gaugeData = [{ group: 'value', value: rate }];
+
+  // Update existing gauge if possible
+  if (updateChartData('gauge', gaugeData)) return;
+
+  // Create new gauge
   const container = document.getElementById('successGauge');
   destroyChart('gauge');
   container.innerHTML = '';
-
-  if (rate == null) return;
 
   let status;
   if (rate >= 95) status = 'success';
@@ -253,7 +265,7 @@ function renderGauge(rate) {
 
   try {
     const chart = new Charts.GaugeChart(container, {
-      data: [{ group: 'value', value: rate }],
+      data: gaugeData,
       options: {
         theme: 'g100',
         resizable: true,
@@ -280,17 +292,22 @@ function renderGauge(rate) {
 }
 
 function renderToolChart(topTools) {
-  const container = document.getElementById('toolChart');
-  destroyChart('tools');
-  container.innerHTML = '';
-
   if (!topTools || topTools.length === 0) {
-    container.innerHTML = '<p class="empty-state">No tool calls yet</p>';
+    destroyChart('tools');
+    document.getElementById('toolChart').innerHTML = '<p class="empty-state">No tool calls yet</p>';
     return;
   }
 
+  const chartData = topTools.map(t => ({ group: t.tool_name, value: t.calls }));
+
+  // Update existing chart if possible
+  if (updateChartData('tools', chartData)) return;
+
+  // Create new chart
+  const container = document.getElementById('toolChart');
+  destroyChart('tools');
+  container.innerHTML = '';
   try {
-    const chartData = topTools.map(t => ({ group: t.tool_name, value: t.calls }));
     const chartHeight = Math.max(200, topTools.length * 28 + 60) + 'px';
     const chart = new Charts.SimpleBarChart(container, {
       data: chartData,
@@ -340,17 +357,22 @@ function renderToolChart(topTools) {
 }
 
 function renderSourceChart(sourceBreakdown) {
-  const container = document.getElementById('sourceChart');
-  destroyChart('source');
-  container.innerHTML = '';
-
   if (!sourceBreakdown || sourceBreakdown.length === 0) {
-    container.innerHTML = '<p class="empty-state">No data</p>';
+    destroyChart('source');
+    document.getElementById('sourceChart').innerHTML = '<p class="empty-state">No data</p>';
     return;
   }
 
+  const chartData = sourceBreakdown.map(s => ({ group: s.source_id, value: s.calls }));
+
+  // Update existing chart if possible
+  if (updateChartData('source', chartData)) return;
+
+  // Create new chart
+  const container = document.getElementById('sourceChart');
+  destroyChart('source');
+  container.innerHTML = '';
   try {
-    const chartData = sourceBreakdown.map(s => ({ group: s.source_id, value: s.calls }));
     const chart = new Charts.DonutChart(container, {
       data: chartData,
       options: {
@@ -380,25 +402,27 @@ function renderSourceChart(sourceBreakdown) {
 }
 
 function renderSourceTokenChart(sourceBreakdown) {
-  const container = document.getElementById('sourceTokenChart');
-  destroyChart('sourceToken');
-  container.innerHTML = '';
-
   if (!sourceBreakdown || sourceBreakdown.length === 0) {
-    container.innerHTML = '<p class="empty-state">No data</p>';
+    destroyChart('sourceToken');
+    document.getElementById('sourceTokenChart').innerHTML = '<p class="empty-state">No data</p>';
     return;
   }
 
+  const chartData = [];
+  sourceBreakdown.forEach(s => {
+    chartData.push({ group: 'Calls', key: s.source_id, value: s.calls });
+    chartData.push({ group: 'Tokens (K)', key: s.source_id, value: Math.round((s.tokens || 0) / 1000) });
+  });
+
+  // Update existing chart if possible
+  if (updateChartData('sourceToken', chartData)) return;
+
+  // Create new chart
+  const container = document.getElementById('sourceTokenChart');
+  destroyChart('sourceToken');
+  container.innerHTML = '';
   try {
-    const chartData = [];
-    sourceBreakdown.forEach(s => {
-      chartData.push({ group: 'Calls', key: s.source_id, value: s.calls });
-      chartData.push({ group: 'Tokens (K)', key: s.source_id, value: Math.round((s.tokens || 0) / 1000) });
-    });
-
-    // Scale height to source count so bars don't overlap
     const chartHeight = Math.max(200, sourceBreakdown.length * 60 + 80) + 'px';
-
     const chart = new Charts.GroupedBarChart(container, {
       data: chartData,
       options: {
@@ -592,10 +616,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopPolling();
   } else {
-    // Replace chart containers with fresh DOM nodes to clear any
-    // residual state (ResizeObservers, inline styles) from hidden tab
-    ['successGauge', 'toolChart', 'sourceChart', 'sourceTokenChart'].forEach(freshContainer);
-    chartInstances.clear();
+    // Charts are kept alive — just update their data
     refresh();
     startPolling();
   }
