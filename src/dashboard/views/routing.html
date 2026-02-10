@@ -119,6 +119,16 @@
     </cds-tile>
   </div>
 
+  <!-- Bottom navigation -->
+  <div class="dashboard-header" style="margin-top:2rem">
+    <div class="header-controls">
+      <cds-tabs type="contained" value="routing" id="navTabsBottom">
+        <cds-tab value="overview">Overview</cds-tab>
+        <cds-tab value="routing" selected>Routing</cds-tab>
+      </cds-tabs>
+    </div>
+  </div>
+
 </div>
 
 <!-- Edit/Add Modal -->
@@ -286,9 +296,6 @@ async function loadRules() {
     document.getElementById('newContextBtn').style.display = 'block';
   }
 
-  // Attach event listeners via delegation
-  container.addEventListener('click', handleRuleAction);
-
   // Render unrouted sources
   const unrouted = data.unroutedSources || [];
   const unroutedSection = document.getElementById('unroutedSection');
@@ -349,8 +356,8 @@ async function moveRule(ctx, index, direction) {
 
   const scrollY = window.scrollY;
   await loadRules();
-  // Wait for Carbon custom elements to render before restoring scroll
-  requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, scrollY)));
+  // Wait for Carbon custom elements to fully render before restoring scroll
+  setTimeout(() => window.scrollTo(0, scrollY), 150);
 }
 
 function openModal(title, ctx, sourceId, reason) {
@@ -491,13 +498,18 @@ document.getElementById('previewContext').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('previewBtn').click();
 });
 
-// Tab navigation
-document.getElementById('navTabs').addEventListener('cds-tabs-selected', (e) => {
+// Tab navigation (top + bottom)
+function handleNavTab(e) {
   const val = e.detail?.item?.getAttribute('value') || e.target.value;
   if (val === 'overview') {
     window.location.href = '/dashboard';
   }
-});
+}
+document.getElementById('navTabs').addEventListener('cds-tabs-selected', handleNavTab);
+document.getElementById('navTabsBottom').addEventListener('cds-tabs-selected', handleNavTab);
+
+// Attach rule action delegation once (not inside loadRules to avoid duplicates)
+document.getElementById('rulesContainer').addEventListener('click', handleRuleAction);
 
 // Check read-only access
 async function checkAccess() {

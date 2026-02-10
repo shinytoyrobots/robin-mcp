@@ -588,8 +588,11 @@ function stopPolling() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopPolling();
+    // Destroy chart instances to remove ResizeObservers that fire
+    // with zero dimensions in hidden tabs, collapsing the SVG
+    destroyAllCharts();
   } else {
-    // Tab returned — refresh charts (each render function handles its own cleanup)
+    // Tab visible again — recreate charts from scratch
     refresh();
     startPolling();
   }
