@@ -102,4 +102,19 @@ export function registerWritingsResources(server: McpServer): void {
       ],
     })
   );
+
+  server.resource(
+    "tom-cannon-research",
+    "robin://writings/tom-cannon-research",
+    { description: "Published academic research outputs by Prof Tom Cannon at University of Liverpool — books, papers, and reports on business, management, and entrepreneurship" },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.toString(),
+          mimeType: "text/plain",
+          text: await fetchWebsiteContent("https://www.liverpool.ac.uk/people/tom-cannon/research-outputs"),
+        },
+      ],
+    })
+  );
 }

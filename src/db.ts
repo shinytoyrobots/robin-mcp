@@ -95,6 +95,7 @@ function initSchema(db: Database.Database): void {
 
   seedDefaultSources(db);
   seedDefaultContexts(db);
+  migrateTomCannonSource(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -193,6 +194,38 @@ function seedDefaultContexts(db: Database.Database): void {
   seed();
 }
 
+function migrateTomCannonSource(db: Database.Database): void {
+  const existing = db.prepare("SELECT id FROM sources WHERE id = 'tom-cannon-research'").get();
+  if (existing) return;
+
+  const migrate = db.transaction(() => {
+    db.prepare(
+      "INSERT INTO sources (id, name, description, tools, resources) VALUES (?, ?, ?, ?, ?)"
+    ).run(
+      "tom-cannon-research",
+      "Tom Cannon Research Outputs",
+      "Published academic research by Prof Tom Cannon — books, papers, and reports on business, management, and entrepreneurship",
+      "http-fetch",
+      "robin://writings/tom-cannon-research",
+    );
+
+    // Append at bottom of relevant contexts
+    const appendRule = (context: string, reason: string) => {
+      const maxRow = db
+        .prepare("SELECT COALESCE(MAX(priority), 0) as max_p FROM source_rules WHERE context = ?")
+        .get(context) as { max_p: number };
+      db.prepare(
+        "INSERT OR IGNORE INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)"
+      ).run(context, "tom-cannon-research", maxRow.max_p + 1, reason);
+    };
+
+    appendRule("personal-brand", "Tom Cannon's academic research outputs provide professional/family context");
+    appendRule("research", "Tom Cannon's published academic research on business, management, and entrepreneurship");
+  });
+
+  migrate();
+}
+
 function seedDefaultSources(db: Database.Database): void {
   const existing = db.prepare("SELECT COUNT(*) as count FROM sources").get() as { count: number };
   if (existing.count > 0) return;
@@ -213,6 +246,7 @@ function seedDefaultSources(db: Database.Database): void {
     insertSource.run("github", "GitHub", "GitHub repo search and API access", "github-search-repos,http-fetch", "");
     insertSource.run("vault", "Creative Vault", "StaticDrift fiction universe - private creative writing repo", "vault-read-file,vault-list-dir", "robin://vault/structure");
     insertSource.run("linear", "Linear", "Project management - issues, teams, assignments", "linear-search-issues,linear-get-issue,linear-my-issues,linear-create-issue", "robin://linear/teams");
+    insertSource.run("tom-cannon-research", "Tom Cannon Research Outputs", "Published academic research by Prof Tom Cannon — books, papers, and reports on business, management, and entrepreneurship", "http-fetch", "robin://writings/tom-cannon-research");
 
     // Contextual rules (priority: 1 = most preferred)
     // Code & engineering
@@ -238,11 +272,13 @@ function seedDefaultSources(db: Database.Database): void {
     // Personal brand & public content
     insertRule.run("personal-brand", "writings", 1, "Website and blog are the canonical public presence");
     insertRule.run("personal-brand", "kb-bookmarks", 2, "Bookmarks may track published content or press");
+    insertRule.run("personal-brand", "tom-cannon-research", 3, "Tom Cannon's academic research outputs provide professional/family context");
 
     // Research & reference
     insertRule.run("research", "kb-notes", 1, "Notes are the primary place to store research findings");
     insertRule.run("research", "kb-bookmarks", 2, "Bookmarks save reference material");
     insertRule.run("research", "github", 3, "GitHub repos can be research references");
+    insertRule.run("research", "tom-cannon-research", 4, "Tom Cannon's published academic research on business, management, and entrepreneurship");
 
     // General / catch-all
     insertRule.run("general", "kb-notes", 1, "Notes are the most versatile knowledge store");
