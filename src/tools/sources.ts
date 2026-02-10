@@ -42,6 +42,11 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         )
         .all() as Array<SourceRule & { source_name: string }>;
 
+      const ctxDescs = db
+        .prepare("SELECT name, description FROM contexts")
+        .all() as Array<{ name: string; description: string }>;
+      const descMap = new Map(ctxDescs.map(c => [c.name, c.description]));
+
       // Group rules by context
       const contexts = new Map<string, Array<SourceRule & { source_name: string }>>();
       for (const rule of rules) {
@@ -68,6 +73,8 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         "When handling a request, identify the context and follow the priority order below (1 = highest priority).\n\n";
       for (const [context, ctxRules] of contexts) {
         text += `### ${context}\n`;
+        const desc = descMap.get(context);
+        if (desc) text += `*${desc}*\n\n`;
         for (const r of ctxRules) {
           text += `${r.priority}. **${r.source_name}** — ${r.reason}\n`;
         }
@@ -95,6 +102,10 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
     },
     async ({ context }) => {
       const db = getDb();
+
+      const ctxDesc = db
+        .prepare("SELECT description FROM contexts WHERE name = ?")
+        .get(context) as { description: string } | undefined;
 
       const rules = db
         .prepare(
@@ -147,6 +158,7 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         };
       }
 
+      const descLine = ctxDesc?.description ? `\n${ctxDesc.description}\n` : "";
       const lines = rules.map(
         (r) =>
           `${r.priority}. ${r.name}: ${r.reason}\n   Tools: ${r.tools || "none"} | Resources: ${r.resources || "none"}`
@@ -156,7 +168,7 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         content: [
           {
             type: "text" as const,
-            text: `Source routing for "${context}":\n\n${lines.join("\n\n")}`,
+            text: `Source routing for "${context}":${descLine}\n${lines.join("\n\n")}`,
           },
         ],
       };
@@ -166,14 +178,13 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
   // Tool: add or update a routing rule
   if (!readOnly) server.tool(
     "set-source-rule",
-    "Add or update a contextual routing rule for a source",
+    "Add or update a contextual routing rule for a source. New rules are appended at the bottom; existing rules update the reason only.",
     {
       context: z.string().describe("Context name, e.g. 'code', 'design', 'hiring'"),
       sourceId: z.string().describe("Source ID, e.g. 'linear', 'github', 'kb-notes'"),
-      priority: z.number().describe("Priority (1 = highest)"),
       reason: z.string().describe("Why this source is relevant for this context"),
     },
-    async ({ context, sourceId, priority, reason }) => {
+    async ({ context, sourceId, reason }) => {
       const db = getDb();
 
       const source = db
@@ -193,17 +204,42 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         };
       }
 
+      // Check if rule already exists
+      const existing = db
+        .prepare("SELECT id, priority FROM source_rules WHERE context = ? AND source_id = ?")
+        .get(context, sourceId) as { id: number; priority: number } | undefined;
+
+      if (existing) {
+        db.prepare("UPDATE source_rules SET reason = ? WHERE id = ?")
+          .run(reason, existing.id);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Rule updated: "${context}" → ${sourceId} at priority ${existing.priority} (reason updated)`,
+            },
+          ],
+        };
+      }
+
+      // New rule: append at max+1
+      const maxRow = db
+        .prepare("SELECT COALESCE(MAX(priority), 0) as max_p FROM source_rules WHERE context = ?")
+        .get(context) as { max_p: number };
+      const newPriority = maxRow.max_p + 1;
+
       db.prepare(
-        `INSERT INTO source_rules (context, source_id, priority, reason)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(context, source_id) DO UPDATE SET priority = ?, reason = ?`
-      ).run(context, sourceId, priority, reason, priority, reason);
+        "INSERT INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)"
+      ).run(context, sourceId, newPriority, reason);
+
+      // Auto-create context entry if new
+      db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, '')").run(context);
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Rule set: "${context}" → ${sourceId} at priority ${priority}`,
+            text: `Rule set: "${context}" → ${sourceId} at priority ${newPriority}`,
           },
         ],
       };

@@ -20,6 +20,23 @@ export function getDb(): Database.Database {
   return db;
 }
 
+/**
+ * Renumber all rules in a context to sequential 1..N priorities.
+ */
+export function compactPriorities(db: Database.Database, context: string): void {
+  const rules = db
+    .prepare("SELECT id FROM source_rules WHERE context = ? ORDER BY priority")
+    .all(context) as Array<{ id: number }>;
+
+  const update = db.prepare("UPDATE source_rules SET priority = ? WHERE id = ?");
+  const compact = db.transaction(() => {
+    rules.forEach((rule, i) => {
+      update.run(i + 1, rule.id);
+    });
+  });
+  compact();
+}
+
 function initSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
@@ -58,11 +75,20 @@ function initSchema(db: Database.Database): void {
       reason TEXT NOT NULL DEFAULT '',
       UNIQUE(context, source_id)
     );
+
+    CREATE TABLE IF NOT EXISTS contexts (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT ''
+    );
   `);
+
+  // Migration: add UNIQUE(context, priority) constraint to source_rules if missing
+  migrateSourceRulesConstraint(db);
 
   initAnalyticsSchema(db);
 
   seedDefaultSources(db);
+  seedDefaultContexts(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -104,6 +130,61 @@ function initSchema(db: Database.Database): void {
       END;
     `);
   }
+}
+
+function migrateSourceRulesConstraint(db: Database.Database): void {
+  const tableInfo = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='source_rules'")
+    .get() as { sql: string } | undefined;
+
+  if (!tableInfo) return;
+
+  // Check if the UNIQUE(context, priority) constraint already exists
+  if (tableInfo.sql.includes("UNIQUE(context, priority)")) return;
+
+  const migrate = db.transaction(() => {
+    // Compact priorities first to ensure no conflicts
+    const ctxRows = db
+      .prepare("SELECT DISTINCT context FROM source_rules")
+      .all() as Array<{ context: string }>;
+    for (const { context } of ctxRows) {
+      compactPriorities(db, context);
+    }
+
+    db.exec(`
+      CREATE TABLE source_rules_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        context TEXT NOT NULL,
+        source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        priority INTEGER NOT NULL DEFAULT 1,
+        reason TEXT NOT NULL DEFAULT '',
+        UNIQUE(context, source_id),
+        UNIQUE(context, priority)
+      );
+      INSERT INTO source_rules_new (id, context, source_id, priority, reason)
+        SELECT id, context, source_id, priority, reason FROM source_rules;
+      DROP TABLE source_rules;
+      ALTER TABLE source_rules_new RENAME TO source_rules;
+    `);
+  });
+  migrate();
+}
+
+function seedDefaultContexts(db: Database.Database): void {
+  const existing = db.prepare("SELECT COUNT(*) as count FROM contexts").get() as { count: number };
+  if (existing.count > 0) return;
+
+  const insert = db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)");
+  const seed = db.transaction(() => {
+    insert.run("code", "Context for writing, reviewing, or analyzing application code and engineering topics");
+    insert.run("project-management", "Tracking issues, sprints, and team work via Linear and related tools");
+    insert.run("creative-writing", "Fiction writing, story development, and creative composition");
+    insert.run("static-drift", "The Static Drift speculative fiction universe — worldbuilding, stories, and lore");
+    insert.run("personal-brand", "Public web presence, published writing, and professional profile");
+    insert.run("research", "Research notes, references, and information gathering");
+    insert.run("general", "Catch-all context for general knowledge queries and tasks");
+  });
+  seed();
 }
 
 function seedDefaultSources(db: Database.Database): void {

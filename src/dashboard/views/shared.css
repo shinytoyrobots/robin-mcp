@@ -229,6 +229,15 @@ cds-tag {
   margin-bottom: 0.5rem;
 }
 
+/* Context description row */
+.context-desc-row { display: flex; align-items: center; margin-bottom: 0.75rem; gap: 0.5rem; }
+.context-desc { font-size: 0.82rem; color: var(--cds-text-secondary, #c6c6c6); }
+.context-desc em { color: var(--cds-text-helper, #8d8d8d); }
+
+/* Reorder buttons */
+.reorder-btns { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.reorder-btns cds-button { min-height: 20px; font-size: 0.85rem; }
+
 /* Modal form layout */
 .modal-form-group {
   margin-bottom: 1rem;

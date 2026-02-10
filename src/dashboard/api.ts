@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { getDb } from "../db.js";
+import { getDb, compactPriorities } from "../db.js";
 
 export function createApiRouter(
   sessions: Map<string, unknown>,
@@ -175,6 +175,15 @@ export function createApiRouter(
       .prepare("SELECT id, name FROM sources ORDER BY name")
       .all();
 
+    const ctxDescs = db
+      .prepare("SELECT name, description FROM contexts")
+      .all() as Array<{ name: string; description: string }>;
+
+    const contextDescriptions: Record<string, string> = {};
+    for (const c of ctxDescs) {
+      contextDescriptions[c.name] = c.description;
+    }
+
     // Group by context
     const grouped: Record<
       string,
@@ -197,7 +206,7 @@ export function createApiRouter(
       });
     }
 
-    res.json({ contexts: grouped, sources });
+    res.json({ contexts: grouped, sources, contextDescriptions });
   });
 
   // PUT /api/routing — update a rule (full access only)
@@ -207,17 +216,16 @@ export function createApiRouter(
       return;
     }
 
-    const { context, sourceId, priority, reason } = req.body as {
+    const { context, sourceId, reason } = req.body as {
       context: string;
       sourceId: string;
-      priority: number;
       reason: string;
     };
 
-    if (!context || !sourceId || priority == null || !reason) {
+    if (!context || !sourceId || !reason) {
       res
         .status(400)
-        .json({ error: "Missing required fields: context, sourceId, priority, reason" });
+        .json({ error: "Missing required fields: context, sourceId, reason" });
       return;
     }
 
@@ -232,11 +240,29 @@ export function createApiRouter(
       return;
     }
 
-    db.prepare(
-      `INSERT INTO source_rules (context, source_id, priority, reason)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(context, source_id) DO UPDATE SET priority = ?, reason = ?`,
-    ).run(context, sourceId, priority, reason, priority, reason);
+    // Check if rule already exists
+    const existing = db
+      .prepare("SELECT id FROM source_rules WHERE context = ? AND source_id = ?")
+      .get(context, sourceId);
+
+    if (existing) {
+      // Update reason only, keep priority
+      db.prepare("UPDATE source_rules SET reason = ? WHERE context = ? AND source_id = ?")
+        .run(reason, context, sourceId);
+    } else {
+      // New rule: assign priority = max + 1
+      const maxRow = db
+        .prepare("SELECT COALESCE(MAX(priority), 0) as max_p FROM source_rules WHERE context = ?")
+        .get(context) as { max_p: number };
+      const newPriority = maxRow.max_p + 1;
+
+      db.prepare(
+        "INSERT INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)",
+      ).run(context, sourceId, newPriority, reason);
+
+      // Auto-create context entry if new
+      db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, '')").run(context);
+    }
 
     res.json({ ok: true });
   });
@@ -270,6 +296,89 @@ export function createApiRouter(
       return;
     }
 
+    compactPriorities(db, context);
+    res.json({ ok: true });
+  });
+
+  // POST /api/routing/reorder — reorder rules within a context
+  router.post("/routing/reorder", (req: Request, res: Response) => {
+    if (req.dashboardAccess !== "full") {
+      res.status(403).json({ error: "Full access required" });
+      return;
+    }
+
+    const { context, sourceIds } = req.body as {
+      context: string;
+      sourceIds: string[];
+    };
+
+    if (!context || !Array.isArray(sourceIds) || sourceIds.length === 0) {
+      res.status(400).json({ error: "Missing required fields: context, sourceIds" });
+      return;
+    }
+
+    const db = getDb();
+
+    // Validate sourceIds matches existing rules exactly
+    const existingRules = db
+      .prepare("SELECT source_id FROM source_rules WHERE context = ? ORDER BY priority")
+      .all(context) as Array<{ source_id: string }>;
+
+    const existingIds = existingRules.map(r => r.source_id).sort();
+    const requestedIds = [...sourceIds].sort();
+
+    if (existingIds.length !== requestedIds.length || !existingIds.every((id, i) => id === requestedIds[i])) {
+      res.status(400).json({ error: "sourceIds must match exactly the existing sources for this context" });
+      return;
+    }
+
+    // Check for duplicates in request
+    if (new Set(sourceIds).size !== sourceIds.length) {
+      res.status(400).json({ error: "sourceIds must not contain duplicates" });
+      return;
+    }
+
+    // Use temporary negative priorities to avoid UNIQUE constraint conflicts, then assign 1..N
+    const reorder = db.transaction(() => {
+      const setNeg = db.prepare("UPDATE source_rules SET priority = ? WHERE context = ? AND source_id = ?");
+      const setPos = db.prepare("UPDATE source_rules SET priority = ? WHERE context = ? AND source_id = ?");
+
+      // Step 1: Set all to negative temporaries
+      sourceIds.forEach((sid, i) => {
+        setNeg.run(-(i + 1), context, sid);
+      });
+
+      // Step 2: Set to final 1..N
+      sourceIds.forEach((sid, i) => {
+        setPos.run(i + 1, context, sid);
+      });
+    });
+
+    reorder();
+    res.json({ ok: true });
+  });
+
+  // PUT /api/contexts/:name — upsert context description
+  router.put("/contexts/:name", (req: Request, res: Response) => {
+    if (req.dashboardAccess !== "full") {
+      res.status(403).json({ error: "Full access required" });
+      return;
+    }
+
+    const name = req.params.name;
+    const { description } = req.body as { description: string };
+
+    if (description == null) {
+      res.status(400).json({ error: "Missing required field: description" });
+      return;
+    }
+
+    const db = getDb();
+    db.prepare(
+      `INSERT INTO contexts (name, description) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET description = ?`,
+    ).run(name, description, description);
+
     res.json({ ok: true });
   });
 
@@ -300,6 +409,11 @@ export function createApiRouter(
       resources: string;
     }>;
 
+    // Get context description
+    const ctxDesc = db
+      .prepare("SELECT description FROM contexts WHERE name = ?")
+      .get(context) as { description: string } | undefined;
+
     // Fall back to general
     if (rules.length === 0) {
       rules = db
@@ -315,6 +429,7 @@ export function createApiRouter(
 
     res.json({
       context,
+      description: ctxDesc?.description || "",
       fallback: rules.length > 0 && rules[0].context !== context,
       rules: rules.map((r) => ({
         source_id: r.source_id,
