@@ -280,15 +280,17 @@ function renderToolChart(topTools) {
 
   try {
     const chartData = topTools.map(t => ({ group: t.tool_name, value: t.calls }));
+    const chartHeight = Math.max(200, topTools.length * 28 + 60) + 'px';
     const chart = new Charts.SimpleBarChart(container, {
       data: chartData,
       options: {
         theme: 'g100',
         resizable: true,
-        height: '250px',
+        height: chartHeight,
         bars: {
           orientation: 'horizontal',
-          maxWidth: 24
+          maxWidth: 12,
+          spacingInner: 0.3
         },
         axes: {
           left: {
@@ -573,10 +575,7 @@ let refreshTimer = null;
 
 function startPolling() {
   if (refreshTimer) return;
-  refreshTimer = setInterval(() => {
-    destroyAllCharts();
-    refresh();
-  }, 30000);
+  refreshTimer = setInterval(refresh, 30000);
 }
 
 function stopPolling() {
@@ -590,12 +589,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopPolling();
   } else {
-    // Wait for browser to complete layout pass before rendering charts
-    requestAnimationFrame(() => {
-      destroyAllCharts();
-      refresh();
-      startPolling();
-    });
+    // Tab returned — refresh charts (each render function handles its own cleanup)
+    refresh();
+    startPolling();
   }
 });
 
