@@ -4,7 +4,7 @@
   "description": "Personal MCP server - knowledge base, API gateway, and writings hub",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/dashboard/views dist/dashboard/",
     "dev:stdio": "tsx src/stdio.ts",
     "dev:http": "tsx src/http.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/stdio.js",

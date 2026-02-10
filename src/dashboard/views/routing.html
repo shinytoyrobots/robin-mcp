@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robin MCP — Source Routing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }
+  a { color: #818cf8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .header h1 { font-size: 1.35rem; color: #f8fafc; }
+  .nav { display: flex; gap: .75rem; }
+  .nav a { font-size: .85rem; padding: .35rem .75rem; border-radius: 6px; background: #1e293b; }
+  .nav a.active { background: #6366f1; color: #fff; }
+
+  .section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .section h2 { font-size: 1rem; color: #f8fafc; margin-bottom: .75rem; cursor: pointer; user-select: none; }
+  .section h2::before { content: '\25B6'; font-size: .7rem; margin-right: .5rem; display: inline-block; transition: transform .2s; }
+  .section h2.open::before { transform: rotate(90deg); }
+
+  .rules { display: none; }
+  .rules.open { display: block; }
+
+  .rule-row { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; background: #0f172a; border-radius: 6px; margin-bottom: .4rem; flex-wrap: wrap; }
+  .rule-priority { background: #6366f1; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; flex-shrink: 0; }
+  .rule-source { font-weight: 600; font-size: .9rem; min-width: 140px; }
+  .rule-reason { flex: 1; font-size: .82rem; color: #94a3b8; min-width: 200px; }
+  .rule-actions { display: flex; gap: .35rem; flex-shrink: 0; }
+  .btn { padding: .3rem .6rem; border: none; border-radius: 5px; cursor: pointer; font-size: .78rem; }
+  .btn-edit { background: #334155; color: #e2e8f0; }
+  .btn-edit:hover { background: #475569; }
+  .btn-delete { background: #450a0a; color: #f87171; }
+  .btn-delete:hover { background: #7f1d1d; }
+  .btn-primary { background: #6366f1; color: #fff; }
+  .btn-primary:hover { background: #4f46e5; }
+  .btn-secondary { background: #334155; color: #e2e8f0; }
+
+  .add-row { margin-top: .5rem; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #1e293b; border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 480px; }
+  .modal h3 { font-size: 1rem; margin-bottom: 1rem; }
+  .form-group { margin-bottom: .75rem; }
+  .form-group label { display: block; font-size: .8rem; color: #94a3b8; margin-bottom: .3rem; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: .5rem .6rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .9rem; font-family: inherit; }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #6366f1; }
+  .modal-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem; }
+
+  /* Preview */
+  .preview-section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .preview-input { display: flex; gap: .5rem; margin-bottom: .75rem; }
+  .preview-input input { flex: 1; padding: .5rem .6rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .9rem; }
+  .preview-result { font-size: .85rem; color: #94a3b8; }
+  .preview-result .preview-rule { padding: .4rem .6rem; background: #0f172a; border-radius: 6px; margin-bottom: .3rem; }
+  .preview-fallback { color: #fbbf24; font-size: .8rem; margin-bottom: .5rem; }
+
+  .empty { text-align: center; color: #64748b; padding: 1rem; }
+  .readonly-notice { background: #422006; color: #fbbf24; padding: .5rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Source Routing Rules</h1>
+  <div class="nav">
+    <a href="/dashboard">Overview</a>
+    <a href="/dashboard/routing" class="active">Routing</a>
+  </div>
+</div>
+
+<div id="readonlyNotice" class="readonly-notice" style="display:none">
+  Read-only access — editing is disabled.
+</div>
+
+<!-- Preview -->
+<div class="preview-section">
+  <h2 style="font-size:1rem;margin-bottom:.75rem">Preview Routing</h2>
+  <div class="preview-input">
+    <input type="text" id="previewContext" placeholder="Enter context (e.g. creative-writing, code, research)">
+    <button class="btn btn-primary" id="previewBtn">Preview</button>
+  </div>
+  <div id="previewResult" class="preview-result"></div>
+</div>
+
+<!-- Rules by context -->
+<div id="rulesContainer"></div>
+
+<!-- Edit/Add Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">Edit Rule</h3>
+    <div class="form-group">
+      <label for="modalContext">Context</label>
+      <input type="text" id="modalContext" placeholder="e.g. code, research">
+    </div>
+    <div class="form-group">
+      <label for="modalSource">Source</label>
+      <select id="modalSource"></select>
+    </div>
+    <div class="form-group">
+      <label for="modalPriority">Priority (1 = highest)</label>
+      <input type="number" id="modalPriority" min="1" max="99" value="1">
+    </div>
+    <div class="form-group">
+      <label for="modalReason">Reason</label>
+      <textarea id="modalReason" placeholder="Why this source is relevant for this context"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modalCancel">Cancel</button>
+      <button class="btn btn-primary" id="modalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/dashboard/api';
+let sources = [];
+let isReadonly = false;
+
+async function fetchJson(url, opts) {
+  const res = await fetch(url, opts);
+  if (res.status === 403) { isReadonly = true; return null; }
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function loadRules() {
+  const data = await fetchJson(API + '/routing');
+  if (!data) return;
+
+  sources = data.sources || [];
+  const contexts = data.contexts || {};
+
+  // Populate source dropdown
+  const sel = document.getElementById('modalSource');
+  sel.innerHTML = sources.map(s =>
+    '<option value="' + s.id + '">' + escHtml(s.name) + ' (' + s.id + ')</option>'
+  ).join('');
+
+  // Detect readonly: attempt a dry-check by looking at dashboardAccess
+  // The API will return 403 on write attempts if readonly, so we defer that check.
+
+  const container = document.getElementById('rulesContainer');
+  const ctxKeys = Object.keys(contexts).sort();
+
+  if (ctxKeys.length === 0) {
+    container.innerHTML = '<p class="empty">No routing rules configured.</p>';
+    return;
+  }
+
+  container.innerHTML = ctxKeys.map(ctx => {
+    const rules = contexts[ctx];
+    const rulesHtml = rules.map(r =>
+      '<div class="rule-row" data-context="' + escHtml(ctx) + '" data-source="' + escHtml(r.source_id) + '">' +
+        '<span class="rule-priority">' + r.priority + '</span>' +
+        '<span class="rule-source">' + escHtml(r.source_name) + '</span>' +
+        '<span class="rule-reason">' + escHtml(r.reason) + '</span>' +
+        (!isReadonly ?
+          '<span class="rule-actions">' +
+            '<button class="btn btn-edit" onclick="editRule(\'' + escHtml(ctx) + '\',\'' + escHtml(r.source_id) + '\',' + r.priority + ',\'' + escHtml(r.reason.replace(/'/g, "\\'")) + '\')">Edit</button>' +
+            '<button class="btn btn-delete" onclick="deleteRule(\'' + escHtml(ctx) + '\',\'' + escHtml(r.source_id) + '\')">Delete</button>' +
+          '</span>' : '') +
+      '</div>'
+    ).join('');
+
+    return '<div class="section">' +
+      '<h2 class="open" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">' + escHtml(ctx) + ' (' + rules.length + ')</h2>' +
+      '<div class="rules open">' + rulesHtml +
+        (!isReadonly ? '<div class="add-row"><button class="btn btn-primary" onclick="addRule(\'' + escHtml(ctx) + '\')">+ Add Rule</button></div>' : '') +
+      '</div></div>';
+  }).join('');
+
+  // Add "New Context" button at the end
+  if (!isReadonly) {
+    container.innerHTML += '<div style="margin-top:.75rem"><button class="btn btn-primary" onclick="addRule(\'\')">+ New Context Rule</button></div>';
+  }
+}
+
+function openModal(title, ctx, sourceId, priority, reason) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalContext').value = ctx;
+  document.getElementById('modalContext').disabled = !!ctx;
+  document.getElementById('modalSource').value = sourceId || (sources[0]?.id || '');
+  document.getElementById('modalPriority').value = priority || 1;
+  document.getElementById('modalReason').value = reason || '';
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+window.editRule = function(ctx, sourceId, priority, reason) {
+  openModal('Edit Rule', ctx, sourceId, priority, reason);
+};
+
+window.addRule = function(ctx) {
+  openModal('Add Rule', ctx, '', 1, '');
+  if (!ctx) document.getElementById('modalContext').disabled = false;
+};
+
+window.deleteRule = async function(ctx, sourceId) {
+  if (!confirm('Delete rule: ' + ctx + ' → ' + sourceId + '?')) return;
+  await fetchJson(API + '/routing', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: ctx, sourceId })
+  });
+  loadRules();
+};
+
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+
+document.getElementById('modalSave').addEventListener('click', async () => {
+  const context = document.getElementById('modalContext').value.trim();
+  const sourceId = document.getElementById('modalSource').value;
+  const priority = parseInt(document.getElementById('modalPriority').value, 10);
+  const reason = document.getElementById('modalReason').value.trim();
+
+  if (!context || !sourceId || !priority || !reason) {
+    alert('All fields are required.');
+    return;
+  }
+
+  const result = await fetchJson(API + '/routing', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context, sourceId, priority, reason })
+  });
+
+  if (result === null) {
+    alert('Access denied. Full access required to edit rules.');
+    return;
+  }
+
+  closeModal();
+  loadRules();
+});
+
+// Preview
+document.getElementById('previewBtn').addEventListener('click', async () => {
+  const ctx = document.getElementById('previewContext').value.trim();
+  if (!ctx) return;
+
+  const data = await fetchJson(API + '/routing/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: ctx })
+  });
+
+  const container = document.getElementById('previewResult');
+  if (!data || !data.rules || data.rules.length === 0) {
+    container.innerHTML = '<p class="empty">No routing rules for this context.</p>';
+    return;
+  }
+
+  container.innerHTML =
+    (data.fallback ? '<div class="preview-fallback">No specific rules — falling back to "general"</div>' : '') +
+    data.rules.map(r =>
+      '<div class="preview-rule">' +
+        '<strong>' + r.priority + '.</strong> ' + escHtml(r.source_name) +
+        ' — <span style="color:#94a3b8">' + escHtml(r.reason) + '</span>' +
+        (r.tools ? '<br><span style="font-size:.78rem;color:#64748b">Tools: ' + escHtml(r.tools) + '</span>' : '') +
+      '</div>'
+    ).join('');
+});
+
+document.getElementById('previewContext').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('previewBtn').click();
+});
+
+// Check read-only by attempting a lightweight write probe
+async function checkAccess() {
+  try {
+    const res = await fetch(API + '/routing', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (res.status === 403) {
+      isReadonly = true;
+      document.getElementById('readonlyNotice').style.display = 'block';
+    }
+  } catch {}
+}
+
+checkAccess().then(loadRules);
+</script>
+</body>
+</html>

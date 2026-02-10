@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robin MCP — Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }
+  a { color: #818cf8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .header h1 { font-size: 1.35rem; color: #f8fafc; }
+  .nav { display: flex; gap: .75rem; align-items: center; }
+  .nav a { font-size: .85rem; padding: .35rem .75rem; border-radius: 6px; background: #1e293b; }
+  .nav a.active { background: #6366f1; color: #fff; }
+  .period-select { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; padding: .35rem .5rem; border-radius: 6px; font-size: .85rem; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .card { background: #1e293b; border-radius: 10px; padding: 1.25rem; }
+  .card .label { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+  .card .value { font-size: 1.75rem; font-weight: 700; color: #f8fafc; margin-top: .25rem; }
+  .card .sub { font-size: .8rem; color: #64748b; margin-top: .15rem; }
+
+  .section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  .section h2 { font-size: 1rem; color: #f8fafc; margin-bottom: 1rem; }
+
+  /* Adapter health cards */
+  .adapters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+  .adapter-card { background: #0f172a; border-radius: 8px; padding: 1rem; border: 1px solid #334155; }
+  .adapter-card .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .4rem; vertical-align: middle; }
+  .adapter-card .status-dot.up { background: #22c55e; }
+  .adapter-card .status-dot.down { background: #ef4444; }
+  .adapter-card .adapter-name { font-weight: 600; font-size: .95rem; }
+  .adapter-card .adapter-meta { font-size: .8rem; color: #94a3b8; margin-top: .35rem; }
+
+  /* Bar chart */
+  .bar-chart { display: flex; flex-direction: column; gap: .4rem; }
+  .bar-row { display: flex; align-items: center; gap: .75rem; }
+  .bar-label { width: 200px; font-size: .8rem; color: #cbd5e1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+  .bar-track { flex: 1; background: #0f172a; border-radius: 4px; height: 20px; overflow: hidden; }
+  .bar-fill { height: 100%; background: #6366f1; border-radius: 4px; transition: width .3s; min-width: 2px; }
+  .bar-count { width: 50px; font-size: .8rem; color: #94a3b8; }
+
+  /* Source breakdown */
+  .source-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .source-chip { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: .4rem .75rem; font-size: .8rem; }
+  .source-chip .source-name { color: #cbd5e1; }
+  .source-chip .source-count { color: #6366f1; font-weight: 600; margin-left: .35rem; }
+
+  /* Recent calls table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th { text-align: left; color: #94a3b8; font-weight: 500; padding: .5rem .6rem; border-bottom: 1px solid #334155; }
+  td { padding: .5rem .6rem; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+  .status-badge { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .75rem; font-weight: 500; }
+  .status-badge.success { background: #052e16; color: #4ade80; }
+  .status-badge.error { background: #450a0a; color: #f87171; }
+
+  .sessions-badge { font-size: .8rem; color: #94a3b8; background: #0f172a; padding: .25rem .6rem; border-radius: 6px; }
+
+  .empty { text-align: center; color: #64748b; padding: 2rem; }
+  .refresh-note { font-size: .75rem; color: #475569; text-align: right; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Robin MCP Dashboard</h1>
+  <div class="nav">
+    <span class="sessions-badge" id="sessions">0 sessions</span>
+    <a href="/dashboard" class="active">Overview</a>
+    <a href="/dashboard/routing">Routing</a>
+    <select class="period-select" id="periodSelect">
+      <option value="24h">Last 24h</option>
+      <option value="7d" selected>Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+      <option value="all">All time</option>
+    </select>
+  </div>
+</div>
+
+<!-- Overview Cards -->
+<div class="cards" id="overviewCards">
+  <div class="card"><div class="label">Total Calls</div><div class="value" id="totalCalls">—</div></div>
+  <div class="card"><div class="label">Success Rate</div><div class="value" id="successRate">—</div></div>
+  <div class="card"><div class="label">Avg Response</div><div class="value" id="avgDuration">—</div><div class="sub">ms</div></div>
+  <div class="card"><div class="label">Est. Tokens</div><div class="value" id="estTokens">—</div></div>
+</div>
+
+<!-- Adapter Health -->
+<div class="section">
+  <h2>Adapter Health</h2>
+  <div class="adapters" id="adapterHealth">
+    <p class="empty">Loading...</p>
+  </div>
+</div>
+
+<!-- Tool Usage Chart -->
+<div class="section">
+  <h2>Tool Usage</h2>
+  <div class="bar-chart" id="toolChart">
+    <p class="empty">Loading...</p>
+  </div>
+</div>
+
+<!-- Source Breakdown -->
+<div class="section">
+  <h2>Source Popularity</h2>
+  <div class="source-list" id="sourceBreakdown">
+    <p class="empty">Loading...</p>
+  </div>
+</div>
+
+<!-- Recent Calls -->
+<div class="section">
+  <h2>Recent Calls</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Source</th><th>Status</th><th>Duration</th><th>Tokens</th><th>Time</th></tr></thead>
+      <tbody id="recentCalls"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="refresh-note">Auto-refreshes every 30s</div>
+
+<script>
+const API = '/dashboard/api';
+let period = '7d';
+
+function fmt(n) {
+  if (n == null) return '—';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function relTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'Z');
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return Math.round(diff) + 's ago';
+  if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+  return Math.round(diff / 86400) + 'd ago';
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+async function loadStats() {
+  const data = await fetchJson(API + '/stats?period=' + period);
+
+  document.getElementById('totalCalls').textContent = fmt(data.totalCalls);
+  document.getElementById('successRate').textContent = data.successRate + '%';
+  document.getElementById('avgDuration').textContent = fmt(data.avgDurationMs);
+  document.getElementById('estTokens').textContent = fmt(data.estimatedTokens);
+
+  // Tool chart
+  const chart = document.getElementById('toolChart');
+  if (!data.topTools || data.topTools.length === 0) {
+    chart.innerHTML = '<p class="empty">No tool calls yet</p>';
+  } else {
+    const max = data.topTools[0].calls;
+    chart.innerHTML = data.topTools.map(t =>
+      '<div class="bar-row">' +
+        '<span class="bar-label" title="' + t.tool_name + '">' + t.tool_name + '</span>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(2, (t.calls / max) * 100) + '%"></div></div>' +
+        '<span class="bar-count">' + t.calls + '</span>' +
+      '</div>'
+    ).join('');
+  }
+
+  // Source breakdown
+  const sb = document.getElementById('sourceBreakdown');
+  if (!data.sourceBreakdown || data.sourceBreakdown.length === 0) {
+    sb.innerHTML = '<p class="empty">No data</p>';
+  } else {
+    sb.innerHTML = data.sourceBreakdown.map(s =>
+      '<span class="source-chip"><span class="source-name">' + s.source_id + '</span><span class="source-count">' + s.calls + '</span></span>'
+    ).join('');
+  }
+}
+
+async function loadHealth() {
+  const data = await fetchJson(API + '/health');
+  const container = document.getElementById('adapterHealth');
+
+  if (!data.latest || data.latest.length === 0) {
+    container.innerHTML = '<p class="empty">No adapter data yet</p>';
+    return;
+  }
+
+  container.innerHTML = data.latest.map(a =>
+    '<div class="adapter-card">' +
+      '<span class="status-dot ' + a.status + '"></span>' +
+      '<span class="adapter-name">' + a.adapter_id + '</span>' +
+      '<div class="adapter-meta">' +
+        (a.tool_count != null ? a.tool_count + ' tools' : '') +
+        (a.resource_count != null ? ' &middot; ' + a.resource_count + ' resources' : '') +
+        ' &middot; ' + a.init_duration_ms + 'ms init' +
+        (a.error_message ? '<br><span style="color:#f87171">' + a.error_message + '</span>' : '') +
+      '</div>' +
+      '<div class="adapter-meta">' + relTime(a.checked_at) + '</div>' +
+    '</div>'
+  ).join('');
+}
+
+async function loadRecent() {
+  const data = await fetchJson(API + '/tools?period=' + period + '&limit=50');
+  const tbody = document.getElementById('recentCalls');
+
+  if (!data.data || data.data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No tool calls yet</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.data.map(r =>
+    '<tr>' +
+      '<td>' + r.tool_name + '</td>' +
+      '<td>' + (r.source_id || '—') + '</td>' +
+      '<td><span class="status-badge ' + r.status + '">' + r.status + '</span></td>' +
+      '<td>' + (r.duration_ms != null ? r.duration_ms + 'ms' : '—') + '</td>' +
+      '<td>' + fmt(r.token_estimate) + '</td>' +
+      '<td>' + relTime(r.called_at) + '</td>' +
+    '</tr>'
+  ).join('');
+}
+
+async function loadSessions() {
+  const data = await fetchJson(API + '/sessions');
+  document.getElementById('sessions').textContent = data.active + ' session' + (data.active !== 1 ? 's' : '');
+}
+
+async function refresh() {
+  try { await Promise.all([loadStats(), loadHealth(), loadRecent(), loadSessions()]); }
+  catch (err) { console.error('Dashboard refresh error:', err); }
+}
+
+document.getElementById('periodSelect').addEventListener('change', (e) => {
+  period = e.target.value;
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

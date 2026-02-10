@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import { config } from "./config.js";
+import { initAnalyticsSchema } from "./analytics/schema.js";
 
 let db: Database.Database;
 
@@ -58,6 +59,8 @@ function initSchema(db: Database.Database): void {
       UNIQUE(context, source_id)
     );
   `);
+
+  initAnalyticsSchema(db);
 
   seedDefaultSources(db);
 

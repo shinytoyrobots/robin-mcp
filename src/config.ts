@@ -30,4 +30,7 @@ export const config = {
   // Toby adapter (HTTP, for later)
   tobyMcpUrl: process.env.TOBY_MCP_URL || "",
   tobyMcpToken: process.env.TOBY_MCP_TOKEN || "",
+
+  // Analytics
+  analyticsRetentionDays: parseInt(process.env.ANALYTICS_RETENTION_DAYS || "90", 10),
 };

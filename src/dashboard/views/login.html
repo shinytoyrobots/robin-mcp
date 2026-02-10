@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robin MCP — Login</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .card { background: #1e293b; border-radius: 12px; padding: 2rem; width: 100%; max-width: 400px; box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+  h1 { font-size: 1.25rem; margin-bottom: 1.5rem; color: #f8fafc; }
+  label { display: block; font-size: .85rem; color: #94a3b8; margin-bottom: .5rem; }
+  input { width: 100%; padding: .6rem .75rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .95rem; outline: none; }
+  input:focus { border-color: #6366f1; }
+  button { width: 100%; padding: .65rem; border: none; border-radius: 6px; background: #6366f1; color: #fff; font-size: .95rem; cursor: pointer; margin-top: 1rem; }
+  button:hover { background: #4f46e5; }
+  .error { color: #f87171; font-size: .85rem; margin-top: .75rem; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Robin MCP Dashboard</h1>
+  <form id="loginForm">
+    <label for="token">Access Token</label>
+    <input type="password" id="token" name="token" placeholder="Enter your token" autofocus>
+    <button type="submit">Sign in</button>
+    <p class="error" id="error">Invalid token. Please try again.</p>
+  </form>
+</div>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = document.getElementById('token').value.trim();
+  if (!token) return;
+
+  // Verify token by calling a simple API endpoint
+  const res = await fetch('/dashboard/api/sessions', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+
+  if (res.ok) {
+    document.cookie = 'robin_token=' + encodeURIComponent(token) + ';path=/;max-age=2592000;SameSite=Strict';
+    window.location.href = '/dashboard';
+  } else {
+    document.getElementById('error').style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

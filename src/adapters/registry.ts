@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { jsonSchemaToZodShape } from "./schema-utils.js";
 import { McpProxyAdapter } from "./mcp-proxy.js";
 import type { SourceAdapter, AdapterToolDefinition } from "./types.js";
+import { logAdapterHealth, invalidateSourceCache } from "../analytics/tracker.js";
 
 export class AdapterRegistry {
   private adapters: SourceAdapter[] = [];
@@ -20,16 +21,34 @@ export class AdapterRegistry {
     for (const adapter of this.adapters) {
       if (!adapter.config.enabled) continue;
 
+      const start = Date.now();
       try {
         await adapter.initialize();
+        const initDurationMs = Date.now() - start;
+        logAdapterHealth({
+          adapterId: adapter.config.id,
+          status: "up",
+          initDurationMs,
+          toolCount: adapter.getTools().length,
+          resourceCount: adapter.getResources().length,
+        });
       } catch (err) {
+        const initDurationMs = Date.now() - start;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        logAdapterHealth({
+          adapterId: adapter.config.id,
+          status: "down",
+          initDurationMs,
+          errorMessage,
+        });
         console.error(
           `[adapter:${adapter.config.id}] Failed to initialize (non-fatal):`,
-          err instanceof Error ? err.message : err,
+          errorMessage,
         );
       }
     }
 
+    invalidateSourceCache();
     this.syncSourcesToDb();
   }
 

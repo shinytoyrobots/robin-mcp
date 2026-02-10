@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer } from "./server.js";
 import { config } from "./config.js";
+import { createDashboardRouter } from "./dashboard/router.js";
+import { pruneOldAnalytics } from "./analytics/tracker.js";
 
 const app = express();
 app.use(express.json());
@@ -150,9 +152,20 @@ app.all("/mcp", async (req, res) => {
   res.status(405).json({ error: "Method not allowed" });
 });
 
+// Dashboard UI and API
+app.use("/dashboard", createDashboardRouter(sessions));
+
 app.listen(config.httpPort, async () => {
   console.log(`robin-mcp HTTP server listening on port ${config.httpPort}`);
   console.log(`Endpoint: http://localhost:${config.httpPort}/mcp`);
+  console.log(`Dashboard: http://localhost:${config.httpPort}/dashboard`);
+
+  // Prune old analytics data on startup
+  try {
+    pruneOldAnalytics();
+  } catch (err) {
+    console.error("Analytics pruning failed (non-fatal):", err);
+  }
 
   // Pre-initialize adapters in background so the first session isn't slow
   try {

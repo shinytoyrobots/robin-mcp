@@ -8,6 +8,7 @@ import { registerSourceTools } from "./tools/sources.js";
 import { registerWritingsResources } from "./resources/writings.js";
 import { registerKnowledgeBaseResources } from "./resources/knowledge-base.js";
 import { getAdapterRegistry } from "./adapters/registry.js";
+import { instrumentServer } from "./analytics/instrument.js";
 
 export async function createServer(options?: { readOnly?: boolean }): Promise<McpServer> {
   const readOnly = options?.readOnly ?? false;
@@ -16,6 +17,8 @@ export async function createServer(options?: { readOnly?: boolean }): Promise<Mc
     name: "robin-mcp",
     version: "1.0.0",
   });
+
+  instrumentServer(server, { authLevel: readOnly ? "readonly" : "full" });
 
   // Register native tools
   registerNoteTools(server, readOnly);
