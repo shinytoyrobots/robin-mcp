@@ -204,13 +204,16 @@ function destroyAllCharts() {
 async function loadStats() {
   const data = await fetchJson(API + '/stats?period=' + period);
 
+  // Update text KPIs regardless of visibility
   document.getElementById('totalCalls').textContent = fmt(data.totalCalls);
   document.getElementById('avgDuration').textContent = fmt(data.avgDurationMs);
   document.getElementById('estTokens').textContent = fmt(data.estimatedTokens);
 
-  // Success rate value
   const successRate = data.successRate != null ? data.successRate : 0;
   document.getElementById('successRateValue').textContent = successRate + '%';
+
+  // Skip chart rendering if tab went hidden during fetch
+  if (document.hidden) return;
 
   // Gauge chart for success rate
   renderGauge(successRate);
@@ -380,15 +383,19 @@ function renderSourceTokenChart(sourceBreakdown) {
       chartData.push({ group: 'Tokens (K)', key: s.source_id, value: Math.round((s.tokens || 0) / 1000) });
     });
 
+    // Scale height to source count so bars don't overlap
+    const chartHeight = Math.max(200, sourceBreakdown.length * 60 + 80) + 'px';
+
     const chart = new Charts.GroupedBarChart(container, {
       data: chartData,
       options: {
         theme: 'g100',
         resizable: true,
-        height: '300px',
+        height: chartHeight,
         bars: {
           orientation: 'horizontal',
-          maxWidth: 16
+          maxWidth: 12,
+          spacingInner: 0.3
         },
         axes: {
           left: {
@@ -583,9 +590,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopPolling();
   } else {
-    destroyAllCharts();
-    refresh();
-    startPolling();
+    // Wait for browser to complete layout pass before rendering charts
+    requestAnimationFrame(() => {
+      destroyAllCharts();
+      refresh();
+      startPolling();
+    });
   }
 });
 
