@@ -150,7 +150,17 @@ app.all("/mcp", async (req, res) => {
   res.status(405).json({ error: "Method not allowed" });
 });
 
-app.listen(config.httpPort, () => {
+app.listen(config.httpPort, async () => {
   console.log(`robin-mcp HTTP server listening on port ${config.httpPort}`);
   console.log(`Endpoint: http://localhost:${config.httpPort}/mcp`);
+
+  // Pre-initialize adapters in background so the first session isn't slow
+  try {
+    const { getAdapterRegistry } = await import("./adapters/registry.js");
+    const registry = getAdapterRegistry();
+    await registry.ensureInitialized();
+    console.log("Adapters pre-initialized");
+  } catch (err) {
+    console.error("Adapter pre-initialization failed (non-fatal):", err);
+  }
 });
