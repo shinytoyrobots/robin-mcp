@@ -22,6 +22,11 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
 
+  // Notion adapter (stdio via @notionhq/notion-mcp-server)
+  notionMcpCommand: process.env.NOTION_MCP_COMMAND || "",
+  notionTokenPersonal: process.env.NOTION_TOKEN_PERSONAL || "",
+  notionTokenWork: process.env.NOTION_TOKEN_WORK || "",
+
   // Toby adapter (HTTP, for later)
   tobyMcpUrl: process.env.TOBY_MCP_URL || "",
   tobyMcpToken: process.env.TOBY_MCP_TOKEN || "",

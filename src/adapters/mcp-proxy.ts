@@ -55,14 +55,18 @@ export class McpProxyAdapter implements SourceAdapter {
       isWrite: writeSet ? writeSet.has(t.name) : isWriteTool(t),
     }));
 
-    // Discover resources
-    const resourcesResult = await this.client.listResources();
-    this.resources = (resourcesResult.resources || []).map((r: Resource) => ({
-      uri: r.uri,
-      name: r.name,
-      description: r.description,
-      mimeType: r.mimeType,
-    }));
+    // Discover resources (optional — not all servers support this)
+    try {
+      const resourcesResult = await this.client.listResources();
+      this.resources = (resourcesResult.resources || []).map((r: Resource) => ({
+        uri: r.uri,
+        name: r.name,
+        description: r.description,
+        mimeType: r.mimeType,
+      }));
+    } catch {
+      this.resources = [];
+    }
 
     console.error(
       `[adapter:${this.config.id}] Initialized: ${this.tools.length} tools, ${this.resources.length} resources`,

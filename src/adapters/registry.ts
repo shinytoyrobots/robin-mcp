@@ -180,6 +180,20 @@ export class AdapterRegistry {
       upsertRule.run("research", "gdocs-personal", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)");
       upsertRule.run("general", "gdocs-personal", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)");
     }
+
+    // Routing rules for Notion adapters
+    if (this.adapters.some((a) => a.config.id === "notion-work" && a.config.enabled)) {
+      upsertRule.run("project-management", "notion-work", 2, "Work Notion contains project docs, specs, and team knowledge base", 2, "Work Notion contains project docs, specs, and team knowledge base");
+      upsertRule.run("code", "notion-work", 3, "Work Notion may contain technical specs, architecture docs, and engineering decisions", 3, "Work Notion may contain technical specs, architecture docs, and engineering decisions");
+    }
+
+    if (this.adapters.some((a) => a.config.id === "notion-personal" && a.config.enabled)) {
+      upsertRule.run("creative-writing", "notion-personal", 2, "Personal Notion contains fiction planning, world-building notes, and writing drafts", 2, "Personal Notion contains fiction planning, world-building notes, and writing drafts");
+      upsertRule.run("static-drift", "notion-personal", 3, "Personal Notion may contain Static Drift planning and story notes", 3, "Personal Notion may contain Static Drift planning and story notes");
+      upsertRule.run("research", "notion-personal", 2, "Personal Notion contains research notes, collected references, and project planning", 2, "Personal Notion contains research notes, collected references, and project planning");
+      upsertRule.run("general", "notion-personal", 2, "Personal Notion for todos, scheduling, personal projects, and general notes", 2, "Personal Notion for todos, scheduling, personal projects, and general notes");
+      upsertRule.run("personal-brand", "notion-personal", 3, "Personal Notion may contain content planning and personal project notes", 3, "Personal Notion may contain content planning and personal project notes");
+    }
   }
 }
 
@@ -226,6 +240,56 @@ export function getAdapterRegistry(): AdapterRegistry {
           "drive_markdown_upload",
           "drive_markdown_replace",
         ],
+      }),
+    );
+  }
+
+  // Notion adapters (stdio, per-workspace)
+  const notionToolFilter = [
+    "API-post-search",
+    "API-retrieve-a-page",
+    "API-get-block-children",
+    "API-retrieve-a-page-property",
+    "API-retrieve-a-database",
+    "API-query-data-source",
+    "API-retrieve-a-data-source",
+  ];
+  const notionArgs = config.notionMcpCommand === "npx"
+    ? ["-y", "@notionhq/notion-mcp-server"]
+    : undefined;
+
+  if (config.notionMcpCommand && config.notionTokenPersonal) {
+    registryInstance.addAdapter(
+      new McpProxyAdapter({
+        id: "notion-personal",
+        name: "Notion (Personal)",
+        prefix: "notion-personal-",
+        type: "mcp-proxy",
+        transport: "stdio",
+        description: "Personal Notion workspace — fiction, creative writing, personal todos, scheduling, personal projects, research notes. Not for work/professional content.",
+        enabled: true,
+        command: config.notionMcpCommand,
+        args: notionArgs,
+        env: { NOTION_TOKEN: config.notionTokenPersonal },
+        toolFilter: notionToolFilter,
+      }),
+    );
+  }
+
+  if (config.notionMcpCommand && config.notionTokenWork) {
+    registryInstance.addAdapter(
+      new McpProxyAdapter({
+        id: "notion-work",
+        name: "Notion (Work)",
+        prefix: "notion-work-",
+        type: "mcp-proxy",
+        transport: "stdio",
+        description: "Knapsack work Notion workspace — project docs, specs, and team knowledge",
+        enabled: true,
+        command: config.notionMcpCommand,
+        args: notionArgs,
+        env: { NOTION_TOKEN: config.notionTokenWork },
+        toolFilter: notionToolFilter,
       }),
     );
   }

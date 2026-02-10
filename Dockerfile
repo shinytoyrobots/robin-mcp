@@ -23,6 +23,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /usr/local/bin/google-mcp-server /usr/local/bin/google-mcp-server
+RUN npm install -g @notionhq/notion-mcp-server
 COPY entrypoint.sh ./entrypoint.sh
 
 EXPOSE 3001
