@@ -5,6 +5,12 @@
   visibility: hidden;
 }
 
+/* Always show nav tabs even if Carbon script loads slowly */
+cds-tabs:not(:defined),
+cds-tab:not(:defined) {
+  visibility: visible;
+}
+
 /* Base reset & typography */
 *, *::before, *::after {
   margin: 0;
