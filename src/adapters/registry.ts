@@ -134,11 +134,28 @@ export class AdapterRegistry {
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET name = ?, description = ?, tools = ?, resources = ?`,
     );
-    const upsertRule = db.prepare(
-      `INSERT INTO source_rules (context, source_id, priority, reason)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(context, source_id) DO UPDATE SET priority = ?, reason = ?`,
+    const checkRule = db.prepare(
+      "SELECT id FROM source_rules WHERE context = ? AND source_id = ?",
     );
+    const updateReason = db.prepare(
+      "UPDATE source_rules SET reason = ? WHERE context = ? AND source_id = ?",
+    );
+    const maxPriority = db.prepare(
+      "SELECT COALESCE(MAX(priority), 0) as max_p FROM source_rules WHERE context = ?",
+    );
+    const insertRule = db.prepare(
+      "INSERT INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)",
+    );
+
+    const ensureRule = (context: string, sourceId: string, reason: string) => {
+      const existing = checkRule.get(context, sourceId);
+      if (existing) {
+        updateReason.run(reason, context, sourceId);
+      } else {
+        const row = maxPriority.get(context) as { max_p: number };
+        insertRule.run(context, sourceId, row.max_p + 1, reason);
+      }
+    };
 
     for (const adapter of this.adapters) {
       if (!adapter.config.enabled) continue;
@@ -193,27 +210,27 @@ export class AdapterRegistry {
       );
 
       // Routing rules for work account
-      upsertRule.run("project-management", "gdocs-work", 2, "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)", 2, "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
-      upsertRule.run("code", "gdocs-work", 4, "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)", 4, "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)");
+      ensureRule("project-management", "gdocs-work", "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
+      ensureRule("code", "gdocs-work", "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)");
 
       // Routing rules for personal account
-      upsertRule.run("creative-writing", "gdocs-personal", 4, "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)", 4, "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)");
-      upsertRule.run("research", "gdocs-personal", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)", 3, "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)");
-      upsertRule.run("general", "gdocs-personal", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)", 4, "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)");
+      ensureRule("creative-writing", "gdocs-personal", "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)");
+      ensureRule("research", "gdocs-personal", "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)");
+      ensureRule("general", "gdocs-personal", "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)");
     }
 
     // Routing rules for Notion adapters
     if (this.adapters.some((a) => a.config.id === "notion-work" && a.config.enabled)) {
-      upsertRule.run("project-management", "notion-work", 2, "Work Notion contains project docs, specs, and team knowledge base", 2, "Work Notion contains project docs, specs, and team knowledge base");
-      upsertRule.run("code", "notion-work", 3, "Work Notion may contain technical specs, architecture docs, and engineering decisions", 3, "Work Notion may contain technical specs, architecture docs, and engineering decisions");
+      ensureRule("project-management", "notion-work", "Work Notion contains project docs, specs, and team knowledge base");
+      ensureRule("code", "notion-work", "Work Notion may contain technical specs, architecture docs, and engineering decisions");
     }
 
     if (this.adapters.some((a) => a.config.id === "notion-personal" && a.config.enabled)) {
-      upsertRule.run("creative-writing", "notion-personal", 2, "Personal Notion contains fiction planning, world-building notes, and writing drafts", 2, "Personal Notion contains fiction planning, world-building notes, and writing drafts");
-      upsertRule.run("static-drift", "notion-personal", 3, "Personal Notion may contain Static Drift planning and story notes", 3, "Personal Notion may contain Static Drift planning and story notes");
-      upsertRule.run("research", "notion-personal", 2, "Personal Notion contains research notes, collected references, and project planning", 2, "Personal Notion contains research notes, collected references, and project planning");
-      upsertRule.run("general", "notion-personal", 2, "Personal Notion for todos, scheduling, personal projects, and general notes", 2, "Personal Notion for todos, scheduling, personal projects, and general notes");
-      upsertRule.run("personal-brand", "notion-personal", 3, "Personal Notion may contain content planning and personal project notes", 3, "Personal Notion may contain content planning and personal project notes");
+      ensureRule("creative-writing", "notion-personal", "Personal Notion contains fiction planning, world-building notes, and writing drafts");
+      ensureRule("static-drift", "notion-personal", "Personal Notion may contain Static Drift planning and story notes");
+      ensureRule("research", "notion-personal", "Personal Notion contains research notes, collected references, and project planning");
+      ensureRule("general", "notion-personal", "Personal Notion for todos, scheduling, personal projects, and general notes");
+      ensureRule("personal-brand", "notion-personal", "Personal Notion may contain content planning and personal project notes");
     }
   }
 }
