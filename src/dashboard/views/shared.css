@@ -5,10 +5,34 @@
   visibility: hidden;
 }
 
-/* Always show nav tabs even if Carbon script loads slowly */
-cds-tabs:not(:defined),
-cds-tab:not(:defined) {
-  visibility: visible;
+/* Plain HTML nav tabs (no web component dependency) */
+.nav-tabs {
+  display: inline-flex;
+  background: var(--cds-layer-01, #262626);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.nav-tab {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--cds-text-secondary, #c6c6c6);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.nav-tab:hover {
+  color: var(--cds-text-primary, #f4f4f4);
+  text-decoration: none;
+}
+
+.nav-tab.active {
+  color: var(--cds-text-primary, #f4f4f4);
+  font-weight: 600;
+  border-bottom-color: var(--cds-link-primary, #78a9ff);
 }
 
 /* Base reset & typography */

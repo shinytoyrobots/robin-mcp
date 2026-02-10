@@ -49,10 +49,10 @@
     <h1>Robin MCP Dashboard</h1>
     <div class="header-controls">
       <cds-tag type="gray" id="sessions">0 sessions</cds-tag>
-      <cds-tabs type="contained" value="overview" id="navTabs">
-        <cds-tab value="overview" selected>Overview</cds-tab>
-        <cds-tab value="routing">Routing</cds-tab>
-      </cds-tabs>
+      <nav class="nav-tabs">
+        <a href="/dashboard" class="nav-tab active">Overview</a>
+        <a href="/dashboard/routing" class="nav-tab">Routing</a>
+      </nav>
       <cds-dropdown
         id="periodSelect"
         value="7d"
@@ -199,6 +199,17 @@ function destroyAllCharts() {
   for (const key of chartInstances.keys()) {
     destroyChart(key);
   }
+}
+
+// Replace a chart container with a fresh DOM node — removes all
+// residual state (ResizeObservers, inline styles, event listeners)
+function freshContainer(id) {
+  const old = document.getElementById(id);
+  if (!old) return;
+  const el = document.createElement('div');
+  el.id = old.id;
+  el.className = old.className;
+  old.parentNode.replaceChild(el, old);
 }
 
 async function loadStats() {
@@ -553,14 +564,6 @@ async function refresh() {
   }
 }
 
-// Tab navigation
-document.getElementById('navTabs').addEventListener('cds-tabs-selected', (e) => {
-  const val = e.detail?.item?.getAttribute('value') || e.target.value;
-  if (val === 'routing') {
-    window.location.href = '/dashboard/routing';
-  }
-});
-
 // Period dropdown
 document.getElementById('periodSelect').addEventListener('cds-dropdown-selected', (e) => {
   const item = e.detail?.item;
@@ -588,11 +591,11 @@ function stopPolling() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopPolling();
-    // Destroy chart instances to remove ResizeObservers that fire
-    // with zero dimensions in hidden tabs, collapsing the SVG
-    destroyAllCharts();
   } else {
-    // Tab visible again — recreate charts from scratch
+    // Replace chart containers with fresh DOM nodes to clear any
+    // residual state (ResizeObservers, inline styles) from hidden tab
+    ['successGauge', 'toolChart', 'sourceChart', 'sourceTokenChart'].forEach(freshContainer);
+    chartInstances.clear();
     refresh();
     startPolling();
   }
