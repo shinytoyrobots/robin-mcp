@@ -18,6 +18,73 @@ interface SourceRule {
   reason: string;
 }
 
+// Cache for the routing guide resource (regenerated infrequently)
+const ROUTING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let routingCacheText: string | null = null;
+let routingCacheAt = 0;
+
+/** Call after any write to source_rules, contexts, or sources to bust the cache. */
+export function invalidateRoutingCache(): void {
+  routingCacheText = null;
+}
+
+function buildRoutingGuide(): string {
+  const db = getDb();
+
+  const sources = db
+    .prepare("SELECT * FROM sources ORDER BY name")
+    .all() as Source[];
+  const rules = db
+    .prepare(
+      `SELECT sr.*, s.name as source_name
+       FROM source_rules sr
+       JOIN sources s ON s.id = sr.source_id
+       ORDER BY sr.context, sr.priority`
+    )
+    .all() as Array<SourceRule & { source_name: string }>;
+
+  const ctxDescs = db
+    .prepare("SELECT name, description FROM contexts")
+    .all() as Array<{ name: string; description: string }>;
+  const descMap = new Map(ctxDescs.map(c => [c.name, c.description]));
+
+  // Group rules by context
+  const contexts = new Map<string, Array<SourceRule & { source_name: string }>>();
+  for (const rule of rules) {
+    const list = contexts.get(rule.context) || [];
+    list.push(rule);
+    contexts.set(rule.context, list);
+  }
+
+  let text = "# Source Routing Guide\n\n";
+  text +=
+    "Use this guide to determine which tools and sources to prioritize based on the type of question or task.\n\n";
+
+  text += "## Available Sources\n\n";
+  for (const s of sources) {
+    text += `### ${s.name} (\`${s.id}\`)\n`;
+    text += `${s.description}\n`;
+    if (s.tools) text += `Tools: ${s.tools}\n`;
+    if (s.resources) text += `Resources: ${s.resources}\n`;
+    text += "\n";
+  }
+
+  text += "## Contextual Rules\n\n";
+  text +=
+    "When handling a request, identify the context and follow the priority order below (1 = highest priority).\n\n";
+  for (const [context, ctxRules] of contexts) {
+    text += `### ${context}\n`;
+    const desc = descMap.get(context);
+    if (desc) text += `*${desc}*\n\n`;
+    for (const r of ctxRules) {
+      text += `${r.priority}. **${r.source_name}** — ${r.reason}\n`;
+    }
+    text += "\n";
+  }
+
+  return text;
+}
+
 export function registerSourceTools(server: McpServer, readOnly = false): void {
   // Resource: full source routing guide for Claude to consult
   server.resource(
@@ -28,62 +95,15 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         "Context-aware source routing guide. Consult this to decide which tools/sources to prioritize for a given question.",
     },
     async (uri) => {
-      const db = getDb();
-
-      const sources = db
-        .prepare("SELECT * FROM sources ORDER BY name")
-        .all() as Source[];
-      const rules = db
-        .prepare(
-          `SELECT sr.*, s.name as source_name
-           FROM source_rules sr
-           JOIN sources s ON s.id = sr.source_id
-           ORDER BY sr.context, sr.priority`
-        )
-        .all() as Array<SourceRule & { source_name: string }>;
-
-      const ctxDescs = db
-        .prepare("SELECT name, description FROM contexts")
-        .all() as Array<{ name: string; description: string }>;
-      const descMap = new Map(ctxDescs.map(c => [c.name, c.description]));
-
-      // Group rules by context
-      const contexts = new Map<string, Array<SourceRule & { source_name: string }>>();
-      for (const rule of rules) {
-        const list = contexts.get(rule.context) || [];
-        list.push(rule);
-        contexts.set(rule.context, list);
-      }
-
-      let text = "# Source Routing Guide\n\n";
-      text +=
-        "Use this guide to determine which tools and sources to prioritize based on the type of question or task.\n\n";
-
-      text += "## Available Sources\n\n";
-      for (const s of sources) {
-        text += `### ${s.name} (\`${s.id}\`)\n`;
-        text += `${s.description}\n`;
-        if (s.tools) text += `Tools: ${s.tools}\n`;
-        if (s.resources) text += `Resources: ${s.resources}\n`;
-        text += "\n";
-      }
-
-      text += "## Contextual Rules\n\n";
-      text +=
-        "When handling a request, identify the context and follow the priority order below (1 = highest priority).\n\n";
-      for (const [context, ctxRules] of contexts) {
-        text += `### ${context}\n`;
-        const desc = descMap.get(context);
-        if (desc) text += `*${desc}*\n\n`;
-        for (const r of ctxRules) {
-          text += `${r.priority}. **${r.source_name}** — ${r.reason}\n`;
-        }
-        text += "\n";
+      const now = Date.now();
+      if (!routingCacheText || now - routingCacheAt > ROUTING_CACHE_TTL_MS) {
+        routingCacheText = buildRoutingGuide();
+        routingCacheAt = now;
       }
 
       return {
         contents: [
-          { uri: uri.toString(), mimeType: "text/plain", text },
+          { uri: uri.toString(), mimeType: "text/plain", text: routingCacheText },
         ],
       };
     }
@@ -212,6 +232,7 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
       if (existing) {
         db.prepare("UPDATE source_rules SET reason = ? WHERE id = ?")
           .run(reason, existing.id);
+        invalidateRoutingCache();
         return {
           content: [
             {
@@ -234,6 +255,7 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
 
       // Auto-create context entry if new
       db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, '')").run(context);
+      invalidateRoutingCache();
 
       return {
         content: [
@@ -265,6 +287,7 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = ?, description = ?, tools = ?, resources = ?`
       ).run(id, name, description, tools || "", resources || "", name, description, tools || "", resources || "");
+      invalidateRoutingCache();
 
       return {
         content: [

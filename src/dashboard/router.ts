@@ -8,9 +8,16 @@ import { createApiRouter } from "./api.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Cache views at startup — they don't change at runtime
+const viewCache = new Map<string, string>();
 function readView(name: string): string {
-  const viewsDir = path.resolve(__dirname, "views");
-  return fs.readFileSync(path.join(viewsDir, name), "utf-8");
+  let html = viewCache.get(name);
+  if (!html) {
+    const viewsDir = path.resolve(__dirname, "views");
+    html = fs.readFileSync(path.join(viewsDir, name), "utf-8");
+    viewCache.set(name, html);
+  }
+  return html;
 }
 
 export function createDashboardRouter(

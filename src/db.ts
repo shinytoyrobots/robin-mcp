@@ -82,6 +82,12 @@ function initSchema(db: Database.Database): void {
     );
   `);
 
+  // Indexes for common query ordering
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
+  `);
+
   // Migration: add UNIQUE(context, priority) constraint to source_rules if missing
   migrateSourceRulesConstraint(db);
 

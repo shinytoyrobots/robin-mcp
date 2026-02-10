@@ -1,45 +1,36 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb, compactPriorities } from "../db.js";
+import { invalidateRoutingCache } from "../tools/sources.js";
 
 export function createApiRouter(
   sessions: Map<string, unknown>,
 ): Router {
   const router = Router();
 
-  // GET /api/stats — aggregated usage stats
+  // GET /api/stats — aggregated usage stats (single scan + two grouped queries)
   router.get("/stats", (req: Request, res: Response) => {
     const db = getDb();
     const period = (req.query.period as string) || "7d";
 
     const periodSql = periodToSql(period);
 
-    const totalCalls = db
-      .prepare(
-        `SELECT COUNT(*) as count FROM tool_calls WHERE called_at >= datetime('now', ?)`,
-      )
-      .get(periodSql) as { count: number };
-
-    const successRate = db
+    // Single scan for all scalar aggregates
+    const summary = db
       .prepare(
         `SELECT
            COUNT(*) as total,
-           SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successes
+           SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successes,
+           AVG(duration_ms) as avg_ms,
+           SUM(token_estimate) as tokens
          FROM tool_calls WHERE called_at >= datetime('now', ?)`,
       )
-      .get(periodSql) as { total: number; successes: number };
-
-    const avgDuration = db
-      .prepare(
-        `SELECT AVG(duration_ms) as avg_ms FROM tool_calls WHERE called_at >= datetime('now', ?)`,
-      )
-      .get(periodSql) as { avg_ms: number | null };
-
-    const totalTokens = db
-      .prepare(
-        `SELECT SUM(token_estimate) as tokens FROM tool_calls WHERE called_at >= datetime('now', ?)`,
-      )
-      .get(periodSql) as { tokens: number | null };
+      .get(periodSql) as {
+      total: number;
+      successes: number;
+      avg_ms: number | null;
+      tokens: number | null;
+    };
 
     const topTools = db
       .prepare(
@@ -63,13 +54,13 @@ export function createApiRouter(
 
     res.json({
       period,
-      totalCalls: totalCalls.count,
+      totalCalls: summary.total,
       successRate:
-        successRate.total > 0
-          ? Math.round((successRate.successes / successRate.total) * 100)
+        summary.total > 0
+          ? Math.round((summary.successes / summary.total) * 100)
           : 100,
-      avgDurationMs: Math.round(avgDuration.avg_ms ?? 0),
-      estimatedTokens: totalTokens.tokens ?? 0,
+      avgDurationMs: Math.round(summary.avg_ms ?? 0),
+      estimatedTokens: summary.tokens ?? 0,
       topTools,
       sourceBreakdown,
     });
@@ -151,10 +142,11 @@ export function createApiRouter(
     res.json({ latest, history });
   });
 
-  // GET /api/routing — all source rules
+  // GET /api/routing — all source rules (2 queries: rules+sources join, contexts)
   router.get("/routing", (_req: Request, res: Response) => {
     const db = getDb();
 
+    // Single query: rules joined with source names, plus a separate lightweight contexts query
     const rules = db
       .prepare(
         `SELECT sr.*, s.name as source_name
@@ -171,6 +163,7 @@ export function createApiRouter(
       source_name: string;
     }>;
 
+    // Collect unique source ids/names from rules + all sources for the dropdown
     const sources = db
       .prepare("SELECT id, name FROM sources ORDER BY name")
       .all();
@@ -264,6 +257,7 @@ export function createApiRouter(
       db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, '')").run(context);
     }
 
+    invalidateRoutingCache();
     res.json({ ok: true });
   });
 
@@ -297,6 +291,7 @@ export function createApiRouter(
     }
 
     compactPriorities(db, context);
+    invalidateRoutingCache();
     res.json({ ok: true });
   });
 
@@ -355,6 +350,7 @@ export function createApiRouter(
     });
 
     reorder();
+    invalidateRoutingCache();
     res.json({ ok: true });
   });
 
@@ -379,6 +375,7 @@ export function createApiRouter(
        ON CONFLICT(name) DO UPDATE SET description = ?`,
     ).run(name, description, description);
 
+    invalidateRoutingCache();
     res.json({ ok: true });
   });
 

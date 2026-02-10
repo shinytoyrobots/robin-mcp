@@ -1,5 +1,6 @@
 import express from "express";
 import crypto from "crypto";
+import compression from "compression";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer } from "./server.js";
 import { config } from "./config.js";
@@ -7,6 +8,7 @@ import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
 
 const app = express();
+app.use(compression());
 app.use(express.json());
 
 // Landing page for browser visitors
@@ -77,11 +79,25 @@ app.use("/mcp", (req, res, next) => {
   res.status(401).json({ error: "Unauthorized" });
 });
 
-// Session management: map session IDs to transports
+// Session management: map session IDs to transports with creation time
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_SWEEP_MS = 5 * 60 * 1000; // sweep every 5 minutes
+
 const sessions = new Map<
   string,
-  { transport: StreamableHTTPServerTransport }
+  { transport: StreamableHTTPServerTransport; createdAt: number }
 >();
+
+// Periodic sweep of stale sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.createdAt > SESSION_TTL_MS) {
+      sessions.delete(id);
+      console.log(`Session expired: ${id}`);
+    }
+  }
+}, SESSION_SWEEP_MS);
 
 app.all("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -92,7 +108,7 @@ app.all("/mcp", async (req, res) => {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (id) => {
-          sessions.set(id, { transport });
+          sessions.set(id, { transport, createdAt: Date.now() });
           console.log(`Session created: ${id}`);
         },
       });

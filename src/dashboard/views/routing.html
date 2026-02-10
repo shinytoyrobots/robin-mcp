@@ -321,7 +321,9 @@ async function moveRule(ctx, index, direction) {
     body: JSON.stringify({ context: ctx, sourceIds })
   });
 
-  loadRules();
+  const scrollY = window.scrollY;
+  await loadRules();
+  window.scrollTo(0, scrollY);
 }
 
 function openModal(title, ctx, sourceId, reason) {

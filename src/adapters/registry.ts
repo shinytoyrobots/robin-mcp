@@ -18,35 +18,37 @@ export class AdapterRegistry {
     if (this.initialized) return;
     this.initialized = true;
 
-    for (const adapter of this.adapters) {
-      if (!adapter.config.enabled) continue;
+    const enabledAdapters = this.adapters.filter(a => a.config.enabled);
 
-      const start = Date.now();
-      try {
-        await adapter.initialize();
-        const initDurationMs = Date.now() - start;
-        logAdapterHealth({
-          adapterId: adapter.config.id,
-          status: "up",
-          initDurationMs,
-          toolCount: adapter.getTools().length,
-          resourceCount: adapter.getResources().length,
-        });
-      } catch (err) {
-        const initDurationMs = Date.now() - start;
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        logAdapterHealth({
-          adapterId: adapter.config.id,
-          status: "down",
-          initDurationMs,
-          errorMessage,
-        });
-        console.error(
-          `[adapter:${adapter.config.id}] Failed to initialize (non-fatal):`,
-          errorMessage,
-        );
-      }
-    }
+    await Promise.allSettled(
+      enabledAdapters.map(async (adapter) => {
+        const start = Date.now();
+        try {
+          await adapter.initialize();
+          const initDurationMs = Date.now() - start;
+          logAdapterHealth({
+            adapterId: adapter.config.id,
+            status: "up",
+            initDurationMs,
+            toolCount: adapter.getTools().length,
+            resourceCount: adapter.getResources().length,
+          });
+        } catch (err) {
+          const initDurationMs = Date.now() - start;
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          logAdapterHealth({
+            adapterId: adapter.config.id,
+            status: "down",
+            initDurationMs,
+            errorMessage,
+          });
+          console.error(
+            `[adapter:${adapter.config.id}] Failed to initialize (non-fatal):`,
+            errorMessage,
+          );
+        }
+      }),
+    );
 
     invalidateSourceCache();
     this.syncSourcesToDb();
