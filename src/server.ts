@@ -29,10 +29,12 @@ export async function createServer(options?: { readOnly?: boolean }): Promise<Mc
   registerWritingsResources(server);
   registerKnowledgeBaseResources(server);
 
-  // Register adapter tools and resources
-  const registry = getAdapterRegistry();
-  await registry.ensureInitialized();
-  registry.registerOnServer(server, readOnly);
+  // Register adapter tools and resources (full-access sessions only)
+  if (!readOnly) {
+    const registry = getAdapterRegistry();
+    await registry.ensureInitialized();
+    registry.registerOnServer(server, readOnly);
+  }
 
   return server;
 }
