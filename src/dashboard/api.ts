@@ -46,11 +46,13 @@ export function createApiRouter(
 
     const sourceBreakdown = db
       .prepare(
-        `SELECT COALESCE(source_id, 'unknown') as source_id, COUNT(*) as calls
+        `SELECT COALESCE(source_id, 'unknown') as source_id,
+                COUNT(*) as calls,
+                COALESCE(SUM(token_estimate), 0) as tokens
          FROM tool_calls WHERE called_at >= datetime('now', ?)
          GROUP BY source_id ORDER BY calls DESC`,
       )
-      .all(periodSql) as Array<{ source_id: string; calls: number }>;
+      .all(periodSql) as Array<{ source_id: string; calls: number; tokens: number }>;
 
     res.json({
       period,

@@ -120,6 +120,16 @@
     </cds-tile>
   </div>
 
+  <!-- Source Popularity vs Token Cost Chart -->
+  <div class="section-tile">
+    <cds-tile>
+      <h2 class="section-title">Source Popularity vs Token Cost</h2>
+      <div class="chart-container" id="sourceTokenChart">
+        <p class="empty-state">Loading...</p>
+      </div>
+    </cds-tile>
+  </div>
+
   <!-- Recent Calls Table -->
   <div class="section-tile">
     <cds-tile>
@@ -210,6 +220,9 @@ async function loadStats() {
 
   // Source popularity donut chart
   renderSourceChart(data.sourceBreakdown || []);
+
+  // Source popularity vs token cost grouped bar chart
+  renderSourceTokenChart(data.sourceBreakdown || []);
 }
 
 function renderGauge(rate) {
@@ -350,6 +363,75 @@ function renderSourceChart(sourceBreakdown) {
   }
 }
 
+function renderSourceTokenChart(sourceBreakdown) {
+  const container = document.getElementById('sourceTokenChart');
+  destroyChart('sourceToken');
+  container.innerHTML = '';
+
+  if (!sourceBreakdown || sourceBreakdown.length === 0) {
+    container.innerHTML = '<p class="empty-state">No data</p>';
+    return;
+  }
+
+  try {
+    const chartData = [];
+    sourceBreakdown.forEach(s => {
+      chartData.push({ group: 'Calls', key: s.source_id, value: s.calls });
+      chartData.push({ group: 'Tokens (K)', key: s.source_id, value: Math.round((s.tokens || 0) / 1000) });
+    });
+
+    const chart = new Charts.GroupedBarChart(container, {
+      data: chartData,
+      options: {
+        theme: 'g100',
+        resizable: true,
+        height: '300px',
+        bars: {
+          orientation: 'horizontal',
+          maxWidth: 16
+        },
+        axes: {
+          left: {
+            mapsTo: 'key',
+            scaleType: 'labels'
+          },
+          bottom: {
+            mapsTo: 'value'
+          }
+        },
+        legend: {
+          alignment: 'center',
+          position: 'bottom'
+        },
+        toolbar: { enabled: false },
+        color: {
+          scale: {
+            'Calls': '#6366f1',
+            'Tokens (K)': '#f97316'
+          }
+        }
+      }
+    });
+    chartInstances.set('sourceToken', chart);
+  } catch (e) {
+    // Fallback: simple HTML table
+    container.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.85rem;color:#c6c6c6">' +
+      '<thead><tr>' +
+        '<th style="text-align:left;padding:.5rem;border-bottom:1px solid #393939">Source</th>' +
+        '<th style="text-align:right;padding:.5rem;border-bottom:1px solid #393939">Calls</th>' +
+        '<th style="text-align:right;padding:.5rem;border-bottom:1px solid #393939">Tokens</th>' +
+      '</tr></thead><tbody>' +
+      sourceBreakdown.map(s =>
+        '<tr>' +
+          '<td style="padding:.35rem .5rem">' + s.source_id + '</td>' +
+          '<td style="text-align:right;padding:.35rem .5rem">' + fmt(s.calls) + '</td>' +
+          '<td style="text-align:right;padding:.35rem .5rem">' + fmt(s.tokens || 0) + '</td>' +
+        '</tr>'
+      ).join('') +
+      '</tbody></table>';
+  }
+}
+
 async function loadHealth() {
   const data = await fetchJson(API + '/health');
   const container = document.getElementById('adapterHealth');
@@ -480,11 +562,35 @@ document.getElementById('periodSelect').addEventListener('cds-dropdown-selected'
   }
 });
 
+let refreshTimer = null;
+
+function startPolling() {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(() => {
+    destroyAllCharts();
+    refresh();
+  }, 30000);
+}
+
+function stopPolling() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    destroyAllCharts();
+    refresh();
+    startPolling();
+  }
+});
+
 refresh();
-setInterval(() => {
-  destroyAllCharts();
-  refresh();
-}, 30000);
+startPolling();
 </script>
 </body>
 </html>
