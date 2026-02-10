@@ -27,6 +27,7 @@ export class McpProxyAdapter implements SourceAdapter {
           env: this.config.env
             ? { ...process.env, ...this.config.env } as Record<string, string>
             : undefined,
+          stderr: "pipe",
         })
       : new StreamableHTTPClientTransport(
           new URL(this.config.url),
@@ -44,7 +45,20 @@ export class McpProxyAdapter implements SourceAdapter {
       { capabilities: {} },
     );
 
-    await this.client.connect(transport);
+    // Pipe subprocess stderr so we can see upstream server logs
+    if ("stderr" in transport && transport.stderr) {
+      const id = this.config.id;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (transport.stderr as any).on("data", (chunk: Buffer) => {
+        for (const line of chunk.toString().split("\n")) {
+          if (line.trim()) console.error(`[subprocess:${id}] ${line.trim()}`);
+        }
+      });
+    }
+
+    const t0 = Date.now();
+    await this.client.connect(transport, requestOpts);
+    console.error(`[adapter:${this.config.id}] connect() took ${Date.now() - t0}ms`);
 
     // Discover tools
     const toolsResult = await this.client.listTools(undefined, requestOpts);

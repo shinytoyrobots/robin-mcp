@@ -208,7 +208,14 @@ export function getAdapterRegistry(): AdapterRegistry {
 
   // Google Workspace adapter (stdio)
   if (config.googleMcpCommand) {
-    const env: Record<string, string> = {};
+    const env: Record<string, string> = {
+      // Disable services we don't need — faster startup and avoids
+      // nil-pointer crash in google-mcp-server v0.3.0 multi-account mode.
+      DISABLE_SHEETS: "true",
+      DISABLE_SLIDES: "true",
+      DISABLE_CALENDAR: "true",
+      DISABLE_GMAIL: "true",
+    };
     if (config.googleClientId) env.GOOGLE_CLIENT_ID = config.googleClientId;
     if (config.googleClientSecret) env.GOOGLE_CLIENT_SECRET = config.googleClientSecret;
 
