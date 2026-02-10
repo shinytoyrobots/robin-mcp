@@ -39,6 +39,7 @@ export interface AdapterConfig {
   enabled: boolean;
   toolFilter?: string[];
   writeTools?: string[];  // explicitly mark tools as writes (for upstreams without annotations)
+  timeoutMs?: number;     // request timeout for upstream server (default: 60000)
 }
 
 export interface McpProxyStdioConfig extends AdapterConfig {

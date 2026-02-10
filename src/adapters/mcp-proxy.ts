@@ -35,6 +35,10 @@ export class McpProxyAdapter implements SourceAdapter {
             : undefined,
         );
 
+    const requestOpts = this.config.timeoutMs
+      ? { timeout: this.config.timeoutMs }
+      : undefined;
+
     this.client = new Client(
       { name: `robin-mcp-adapter-${this.config.id}`, version: "1.0.0" },
       { capabilities: {} },
@@ -43,7 +47,7 @@ export class McpProxyAdapter implements SourceAdapter {
     await this.client.connect(transport);
 
     // Discover tools
-    const toolsResult = await this.client.listTools();
+    const toolsResult = await this.client.listTools(undefined, requestOpts);
     const writeSet = this.config.writeTools
       ? new Set(this.config.writeTools)
       : null;

@@ -240,6 +240,7 @@ export function getAdapterRegistry(): AdapterRegistry {
           "drive_markdown_upload",
           "drive_markdown_replace",
         ],
+        timeoutMs: 120000,
       }),
     );
   }
