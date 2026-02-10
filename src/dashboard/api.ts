@@ -199,7 +199,12 @@ export function createApiRouter(
       });
     }
 
-    res.json({ contexts: grouped, sources, contextDescriptions });
+    // Find sources with no routing rules
+    const routedSourceIds = new Set(rules.map(r => r.source_id));
+    const unroutedSources = (sources as Array<{ id: string; name: string }>)
+      .filter(s => !routedSourceIds.has(s.id));
+
+    res.json({ contexts: grouped, sources, contextDescriptions, unroutedSources });
   });
 
   // PUT /api/routing — update a rule (full access only)

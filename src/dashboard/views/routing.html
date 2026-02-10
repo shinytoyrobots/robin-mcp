@@ -108,6 +108,17 @@
     <cds-button kind="primary" id="addContextBtn">+ New Context Rule</cds-button>
   </div>
 
+  <!-- Unrouted sources -->
+  <div id="unroutedSection" style="display:none;margin-top:2rem">
+    <cds-tile>
+      <h2 class="section-title" style="color:var(--cds-text-secondary,#c6c6c6)">Unrouted Sources</h2>
+      <p style="font-size:0.82rem;color:var(--cds-text-helper,#8d8d8d);margin-bottom:0.75rem">
+        These sources are connected but not assigned to any routing context.
+      </p>
+      <div id="unroutedList"></div>
+    </cds-tile>
+  </div>
+
 </div>
 
 <!-- Edit/Add Modal -->
@@ -277,6 +288,21 @@ async function loadRules() {
 
   // Attach event listeners via delegation
   container.addEventListener('click', handleRuleAction);
+
+  // Render unrouted sources
+  const unrouted = data.unroutedSources || [];
+  const unroutedSection = document.getElementById('unroutedSection');
+  if (unrouted.length > 0) {
+    unroutedSection.style.display = 'block';
+    document.getElementById('unroutedList').innerHTML = unrouted.map(s =>
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0">' +
+        '<cds-tag type="warm-gray" size="sm">' + escHtml(s.id) + '</cds-tag>' +
+        '<span style="font-size:0.85rem;color:var(--cds-text-primary,#f4f4f4)">' + escHtml(s.name) + '</span>' +
+      '</div>'
+    ).join('');
+  } else {
+    unroutedSection.style.display = 'none';
+  }
 }
 
 function handleRuleAction(e) {
