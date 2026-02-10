@@ -4,118 +4,154 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robin MCP — Source Routing</title>
+<!-- IBM Plex Sans -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/plex/sans.css">
+<!-- Carbon Themes (g100 dark) -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/web-components/tag/latest/themes.css">
+<!-- Shared styles -->
+<link rel="stylesheet" href="/dashboard/assets/shared.css">
+<!-- Carbon Web Components -->
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tile.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tag.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tabs.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/button.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/accordion.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/structured-list.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/modal.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/text-input.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/select.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/number-input.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/textarea.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/notification.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }
-  a { color: #818cf8; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-  .header h1 { font-size: 1.35rem; color: #f8fafc; }
-  .nav { display: flex; gap: .75rem; }
-  .nav a { font-size: .85rem; padding: .35rem .75rem; border-radius: 6px; background: #1e293b; }
-  .nav a.active { background: #6366f1; color: #fff; }
-
-  .section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
-  .section h2 { font-size: 1rem; color: #f8fafc; margin-bottom: .75rem; cursor: pointer; user-select: none; }
-  .section h2::before { content: '\25B6'; font-size: .7rem; margin-right: .5rem; display: inline-block; transition: transform .2s; }
-  .section h2.open::before { transform: rotate(90deg); }
-
-  .rules { display: none; }
-  .rules.open { display: block; }
-
-  .rule-row { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; background: #0f172a; border-radius: 6px; margin-bottom: .4rem; flex-wrap: wrap; }
-  .rule-priority { background: #6366f1; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; flex-shrink: 0; }
-  .rule-source { font-weight: 600; font-size: .9rem; min-width: 140px; }
-  .rule-reason { flex: 1; font-size: .82rem; color: #94a3b8; min-width: 200px; }
-  .rule-actions { display: flex; gap: .35rem; flex-shrink: 0; }
-  .btn { padding: .3rem .6rem; border: none; border-radius: 5px; cursor: pointer; font-size: .78rem; }
-  .btn-edit { background: #334155; color: #e2e8f0; }
-  .btn-edit:hover { background: #475569; }
-  .btn-delete { background: #450a0a; color: #f87171; }
-  .btn-delete:hover { background: #7f1d1d; }
-  .btn-primary { background: #6366f1; color: #fff; }
-  .btn-primary:hover { background: #4f46e5; }
-  .btn-secondary { background: #334155; color: #e2e8f0; }
-
-  .add-row { margin-top: .5rem; }
-
-  /* Modal */
-  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
-  .modal-overlay.open { display: flex; }
-  .modal { background: #1e293b; border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 480px; }
-  .modal h3 { font-size: 1rem; margin-bottom: 1rem; }
-  .form-group { margin-bottom: .75rem; }
-  .form-group label { display: block; font-size: .8rem; color: #94a3b8; margin-bottom: .3rem; }
-  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: .5rem .6rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .9rem; font-family: inherit; }
-  .form-group textarea { resize: vertical; min-height: 60px; }
-  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #6366f1; }
-  .modal-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem; }
-
-  /* Preview */
-  .preview-section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
-  .preview-input { display: flex; gap: .5rem; margin-bottom: .75rem; }
-  .preview-input input { flex: 1; padding: .5rem .6rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .9rem; }
-  .preview-result { font-size: .85rem; color: #94a3b8; }
-  .preview-result .preview-rule { padding: .4rem .6rem; background: #0f172a; border-radius: 6px; margin-bottom: .3rem; }
-  .preview-fallback { color: #fbbf24; font-size: .8rem; margin-bottom: .5rem; }
-
-  .empty { text-align: center; color: #64748b; padding: 1rem; }
-  .readonly-notice { background: #422006; color: #fbbf24; padding: .5rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: .85rem; }
+  body {
+    background: var(--cds-background, #161616);
+  }
+  /* Structured list row layout */
+  .rule-cells {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .rule-source {
+    font-weight: 600;
+    font-size: 0.9rem;
+    min-width: 140px;
+    color: var(--cds-text-primary, #f4f4f4);
+  }
+  .rule-reason {
+    flex: 1;
+    font-size: 0.82rem;
+    color: var(--cds-text-secondary, #c6c6c6);
+    min-width: 200px;
+  }
+  /* Modal form spacing */
+  cds-modal .modal-form-group {
+    margin-bottom: 1rem;
+  }
+  cds-modal cds-text-input,
+  cds-modal cds-select,
+  cds-modal cds-number-input,
+  cds-modal cds-textarea {
+    width: 100%;
+  }
 </style>
 </head>
-<body>
-<div class="header">
-  <h1>Source Routing Rules</h1>
-  <div class="nav">
-    <a href="/dashboard">Overview</a>
-    <a href="/dashboard/routing" class="active">Routing</a>
+<body class="cds-theme-zone-g100">
+<div class="page-container">
+
+  <!-- Header -->
+  <div class="dashboard-header">
+    <h1>Source Routing Rules</h1>
+    <div class="header-controls">
+      <cds-tabs type="contained" value="routing" id="navTabs">
+        <cds-tab value="overview">Overview</cds-tab>
+        <cds-tab value="routing" selected>Routing</cds-tab>
+      </cds-tabs>
+    </div>
   </div>
-</div>
 
-<div id="readonlyNotice" class="readonly-notice" style="display:none">
-  Read-only access — editing is disabled.
-</div>
-
-<!-- Preview -->
-<div class="preview-section">
-  <h2 style="font-size:1rem;margin-bottom:.75rem">Preview Routing</h2>
-  <div class="preview-input">
-    <input type="text" id="previewContext" placeholder="Enter context (e.g. creative-writing, code, research)">
-    <button class="btn btn-primary" id="previewBtn">Preview</button>
+  <!-- Read-only notice -->
+  <div id="readonlyNotice" style="display:none;margin-bottom:1rem">
+    <cds-inline-notification
+      kind="warning"
+      title="Read-only access"
+      subtitle="Editing is disabled for this token."
+      low-contrast
+      hide-close-button
+    ></cds-inline-notification>
   </div>
-  <div id="previewResult" class="preview-result"></div>
-</div>
 
-<!-- Rules by context -->
-<div id="rulesContainer"></div>
+  <!-- Preview Routing -->
+  <div class="preview-section">
+    <cds-tile>
+      <h2 class="section-title">Preview Routing</h2>
+      <div class="preview-input-row">
+        <cds-text-input
+          id="previewContext"
+          placeholder="Enter context (e.g. creative-writing, code, research)"
+          label="Context"
+          hide-label
+          size="sm"
+        ></cds-text-input>
+        <cds-button size="sm" id="previewBtn">Preview</cds-button>
+      </div>
+      <div id="previewResult" class="preview-result"></div>
+    </cds-tile>
+  </div>
+
+  <!-- Rules by context (accordion) -->
+  <div class="rules-container" id="rulesContainer"></div>
+
+  <!-- Add new context button -->
+  <div id="newContextBtn" style="margin-top:0.75rem;display:none">
+    <cds-button kind="primary" id="addContextBtn">+ New Context Rule</cds-button>
+  </div>
+
+</div>
 
 <!-- Edit/Add Modal -->
-<div class="modal-overlay" id="modal">
-  <div class="modal">
-    <h3 id="modalTitle">Edit Rule</h3>
-    <div class="form-group">
-      <label for="modalContext">Context</label>
-      <input type="text" id="modalContext" placeholder="e.g. code, research">
+<cds-modal id="modal" size="sm">
+  <cds-modal-header>
+    <cds-modal-close-button></cds-modal-close-button>
+    <cds-modal-heading id="modalTitle">Edit Rule</cds-modal-heading>
+  </cds-modal-header>
+  <cds-modal-body>
+    <div class="modal-form-group">
+      <cds-text-input
+        id="modalContext"
+        label="Context"
+        placeholder="e.g. code, research"
+      ></cds-text-input>
     </div>
-    <div class="form-group">
-      <label for="modalSource">Source</label>
-      <select id="modalSource"></select>
+    <div class="modal-form-group">
+      <cds-select id="modalSource" label="Source">
+      </cds-select>
     </div>
-    <div class="form-group">
-      <label for="modalPriority">Priority (1 = highest)</label>
-      <input type="number" id="modalPriority" min="1" max="99" value="1">
+    <div class="modal-form-group">
+      <cds-number-input
+        id="modalPriority"
+        label="Priority (1 = highest)"
+        min="1"
+        max="99"
+        value="1"
+      ></cds-number-input>
     </div>
-    <div class="form-group">
-      <label for="modalReason">Reason</label>
-      <textarea id="modalReason" placeholder="Why this source is relevant for this context"></textarea>
+    <div class="modal-form-group">
+      <cds-textarea
+        id="modalReason"
+        label="Reason"
+        placeholder="Why this source is relevant for this context"
+      ></cds-textarea>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="modalCancel">Cancel</button>
-      <button class="btn btn-primary" id="modalSave">Save</button>
-    </div>
-  </div>
-</div>
+  </cds-modal-body>
+  <cds-modal-footer>
+    <cds-modal-footer-button kind="secondary" id="modalCancel">Cancel</cds-modal-footer-button>
+    <cds-modal-footer-button kind="primary" id="modalSave">Save</cds-modal-footer-button>
+  </cds-modal-footer>
+</cds-modal>
 
 <script>
 const API = '/dashboard/api';
@@ -145,88 +181,138 @@ async function loadRules() {
   // Populate source dropdown
   const sel = document.getElementById('modalSource');
   sel.innerHTML = sources.map(s =>
-    '<option value="' + s.id + '">' + escHtml(s.name) + ' (' + s.id + ')</option>'
+    '<cds-select-item value="' + s.id + '">' + escHtml(s.name) + ' (' + s.id + ')</cds-select-item>'
   ).join('');
-
-  // Detect readonly: attempt a dry-check by looking at dashboardAccess
-  // The API will return 403 on write attempts if readonly, so we defer that check.
 
   const container = document.getElementById('rulesContainer');
   const ctxKeys = Object.keys(contexts).sort();
 
   if (ctxKeys.length === 0) {
-    container.innerHTML = '<p class="empty">No routing rules configured.</p>';
+    container.innerHTML = '<p class="empty-state">No routing rules configured.</p>';
+    if (!isReadonly) {
+      document.getElementById('newContextBtn').style.display = 'block';
+    }
     return;
   }
 
-  container.innerHTML = ctxKeys.map(ctx => {
+  // Build accordion
+  let html = '<cds-accordion>';
+  ctxKeys.forEach(ctx => {
     const rules = contexts[ctx];
-    const rulesHtml = rules.map(r =>
-      '<div class="rule-row" data-context="' + escHtml(ctx) + '" data-source="' + escHtml(r.source_id) + '">' +
-        '<span class="rule-priority">' + r.priority + '</span>' +
-        '<span class="rule-source">' + escHtml(r.source_name) + '</span>' +
-        '<span class="rule-reason">' + escHtml(r.reason) + '</span>' +
-        (!isReadonly ?
-          '<span class="rule-actions">' +
-            '<button class="btn btn-edit" onclick="editRule(\'' + escHtml(ctx) + '\',\'' + escHtml(r.source_id) + '\',' + r.priority + ',\'' + escHtml(r.reason.replace(/'/g, "\\'")) + '\')">Edit</button>' +
-            '<button class="btn btn-delete" onclick="deleteRule(\'' + escHtml(ctx) + '\',\'' + escHtml(r.source_id) + '\')">Delete</button>' +
-          '</span>' : '') +
-      '</div>'
-    ).join('');
+    html += '<cds-accordion-item title="' + escHtml(ctx) + ' (' + rules.length + ')" open>';
 
-    return '<div class="section">' +
-      '<h2 class="open" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">' + escHtml(ctx) + ' (' + rules.length + ')</h2>' +
-      '<div class="rules open">' + rulesHtml +
-        (!isReadonly ? '<div class="add-row"><button class="btn btn-primary" onclick="addRule(\'' + escHtml(ctx) + '\')">+ Add Rule</button></div>' : '') +
-      '</div></div>';
-  }).join('');
+    // Structured list for rules
+    html += '<cds-structured-list>';
+    html += '<cds-structured-list-head>' +
+      '<cds-structured-list-header-row>' +
+        '<cds-structured-list-header-cell>Priority</cds-structured-list-header-cell>' +
+        '<cds-structured-list-header-cell>Source</cds-structured-list-header-cell>' +
+        '<cds-structured-list-header-cell>Reason</cds-structured-list-header-cell>' +
+        (!isReadonly ? '<cds-structured-list-header-cell>Actions</cds-structured-list-header-cell>' : '') +
+      '</cds-structured-list-header-row>' +
+    '</cds-structured-list-head>';
+    html += '<cds-structured-list-body>';
 
-  // Add "New Context" button at the end
+    rules.forEach(r => {
+      html += '<cds-structured-list-row>' +
+        '<cds-structured-list-cell><cds-tag type="blue" size="sm">' + r.priority + '</cds-tag></cds-structured-list-cell>' +
+        '<cds-structured-list-cell><span class="rule-source">' + escHtml(r.source_name) + '</span></cds-structured-list-cell>' +
+        '<cds-structured-list-cell><span class="rule-reason">' + escHtml(r.reason) + '</span></cds-structured-list-cell>';
+
+      if (!isReadonly) {
+        html += '<cds-structured-list-cell><div class="rule-actions">' +
+          '<cds-button kind="ghost" size="sm" data-action="edit" data-ctx="' + escHtml(ctx) + '" data-source="' + escHtml(r.source_id) + '" data-priority="' + r.priority + '" data-reason="' + escHtml(r.reason) + '">Edit</cds-button>' +
+          '<cds-button kind="danger-ghost" size="sm" data-action="delete" data-ctx="' + escHtml(ctx) + '" data-source="' + escHtml(r.source_id) + '">Delete</cds-button>' +
+        '</div></cds-structured-list-cell>';
+      }
+
+      html += '</cds-structured-list-row>';
+    });
+
+    html += '</cds-structured-list-body></cds-structured-list>';
+
+    if (!isReadonly) {
+      html += '<div style="margin-top:0.5rem"><cds-button kind="primary" size="sm" data-action="add" data-ctx="' + escHtml(ctx) + '">+ Add Rule</cds-button></div>';
+    }
+
+    html += '</cds-accordion-item>';
+  });
+  html += '</cds-accordion>';
+
+  container.innerHTML = html;
+
   if (!isReadonly) {
-    container.innerHTML += '<div style="margin-top:.75rem"><button class="btn btn-primary" onclick="addRule(\'\')">+ New Context Rule</button></div>';
+    document.getElementById('newContextBtn').style.display = 'block';
+  }
+
+  // Attach event listeners via delegation
+  container.addEventListener('click', handleRuleAction);
+}
+
+function handleRuleAction(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+
+  const action = btn.dataset.action;
+  const ctx = btn.dataset.ctx || '';
+  const sourceId = btn.dataset.source || '';
+  const priority = parseInt(btn.dataset.priority, 10) || 1;
+  const reason = btn.dataset.reason || '';
+
+  if (action === 'edit') {
+    openModal('Edit Rule', ctx, sourceId, priority, reason);
+  } else if (action === 'delete') {
+    deleteRule(ctx, sourceId);
+  } else if (action === 'add') {
+    openModal('Add Rule', ctx, '', 1, '');
   }
 }
 
 function openModal(title, ctx, sourceId, priority, reason) {
+  const modal = document.getElementById('modal');
   document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalContext').value = ctx;
-  document.getElementById('modalContext').disabled = !!ctx;
-  document.getElementById('modalSource').value = sourceId || (sources[0]?.id || '');
+
+  const ctxInput = document.getElementById('modalContext');
+  ctxInput.value = ctx;
+  ctxInput.disabled = !!ctx;
+
+  const srcSelect = document.getElementById('modalSource');
+  if (sourceId) srcSelect.value = sourceId;
+  else if (sources[0]) srcSelect.value = sources[0].id;
+
   document.getElementById('modalPriority').value = priority || 1;
   document.getElementById('modalReason').value = reason || '';
-  document.getElementById('modal').classList.add('open');
+
+  modal.open = true;
 }
 
 function closeModal() {
-  document.getElementById('modal').classList.remove('open');
+  document.getElementById('modal').open = false;
 }
 
-window.editRule = function(ctx, sourceId, priority, reason) {
-  openModal('Edit Rule', ctx, sourceId, priority, reason);
-};
-
-window.addRule = function(ctx) {
-  openModal('Add Rule', ctx, '', 1, '');
-  if (!ctx) document.getElementById('modalContext').disabled = false;
-};
-
-window.deleteRule = async function(ctx, sourceId) {
-  if (!confirm('Delete rule: ' + ctx + ' → ' + sourceId + '?')) return;
+async function deleteRule(ctx, sourceId) {
+  if (!confirm('Delete rule: ' + ctx + ' \u2192 ' + sourceId + '?')) return;
   await fetchJson(API + '/routing', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ context: ctx, sourceId })
   });
   loadRules();
-};
+}
 
+// Modal cancel
 document.getElementById('modalCancel').addEventListener('click', closeModal);
 
+// Also close on modal's own close event
+document.getElementById('modal').addEventListener('cds-modal-closed', closeModal);
+
+// Modal save
 document.getElementById('modalSave').addEventListener('click', async () => {
-  const context = document.getElementById('modalContext').value.trim();
+  const context = (document.getElementById('modalContext').value || '').trim();
   const sourceId = document.getElementById('modalSource').value;
-  const priority = parseInt(document.getElementById('modalPriority').value, 10);
-  const reason = document.getElementById('modalReason').value.trim();
+  const priorityEl = document.getElementById('modalPriority');
+  const priority = parseInt(priorityEl.value, 10);
+  const reason = (document.getElementById('modalReason').value || '').trim();
 
   if (!context || !sourceId || !priority || !reason) {
     alert('All fields are required.');
@@ -248,9 +334,16 @@ document.getElementById('modalSave').addEventListener('click', async () => {
   loadRules();
 });
 
+// New context button
+document.getElementById('addContextBtn').addEventListener('click', () => {
+  openModal('Add Rule', '', '', 1, '');
+  document.getElementById('modalContext').disabled = false;
+});
+
 // Preview
 document.getElementById('previewBtn').addEventListener('click', async () => {
-  const ctx = document.getElementById('previewContext').value.trim();
+  const ctxInput = document.getElementById('previewContext');
+  const ctx = (ctxInput.value || '').trim();
   if (!ctx) return;
 
   const data = await fetchJson(API + '/routing/preview', {
@@ -261,26 +354,35 @@ document.getElementById('previewBtn').addEventListener('click', async () => {
 
   const container = document.getElementById('previewResult');
   if (!data || !data.rules || data.rules.length === 0) {
-    container.innerHTML = '<p class="empty">No routing rules for this context.</p>';
+    container.innerHTML = '<p class="empty-state">No routing rules for this context.</p>';
     return;
   }
 
   container.innerHTML =
-    (data.fallback ? '<div class="preview-fallback">No specific rules — falling back to "general"</div>' : '') +
+    (data.fallback ? '<div class="preview-fallback">No specific rules \u2014 falling back to "general"</div>' : '') +
     data.rules.map(r =>
       '<div class="preview-rule">' +
         '<strong>' + r.priority + '.</strong> ' + escHtml(r.source_name) +
-        ' — <span style="color:#94a3b8">' + escHtml(r.reason) + '</span>' +
-        (r.tools ? '<br><span style="font-size:.78rem;color:#64748b">Tools: ' + escHtml(r.tools) + '</span>' : '') +
+        ' \u2014 <span style="color:var(--cds-text-secondary,#c6c6c6)">' + escHtml(r.reason) + '</span>' +
+        (r.tools ? '<br><span style="font-size:.78rem;color:var(--cds-text-helper,#8d8d8d)">Tools: ' + escHtml(r.tools) + '</span>' : '') +
       '</div>'
     ).join('');
 });
 
+// Preview on Enter key
 document.getElementById('previewContext').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('previewBtn').click();
 });
 
-// Check read-only by attempting a lightweight write probe
+// Tab navigation
+document.getElementById('navTabs').addEventListener('cds-tabs-selected', (e) => {
+  const val = e.detail?.item?.getAttribute('value') || e.target.value;
+  if (val === 'overview') {
+    window.location.href = '/dashboard';
+  }
+});
+
+// Check read-only access
 async function checkAccess() {
   try {
     const res = await fetch(API + '/routing', {

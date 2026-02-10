@@ -4,140 +4,166 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robin MCP — Dashboard</title>
+<!-- IBM Plex Sans -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/plex/sans.css">
+<!-- Carbon Themes (g100 dark) -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/web-components/tag/latest/themes.css">
+<!-- Carbon Grid -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/web-components/tag/latest/grid.css">
+<!-- Carbon Charts CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@carbon/charts@1.27.2/dist/styles.min.css">
+<!-- Shared styles -->
+<link rel="stylesheet" href="/dashboard/assets/shared.css">
+<!-- Carbon Web Components -->
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tile.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tag.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tabs.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/dropdown.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/data-table.min.js"></script>
+<!-- D3 (charts peer dep) + Carbon Charts UMD -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/@carbon/charts@1.27.2/dist/umd/bundle.umd.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }
-  a { color: #818cf8; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-  .header h1 { font-size: 1.35rem; color: #f8fafc; }
-  .nav { display: flex; gap: .75rem; align-items: center; }
-  .nav a { font-size: .85rem; padding: .35rem .75rem; border-radius: 6px; background: #1e293b; }
-  .nav a.active { background: #6366f1; color: #fff; }
-  .period-select { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; padding: .35rem .5rem; border-radius: 6px; font-size: .85rem; }
-
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-  .card { background: #1e293b; border-radius: 10px; padding: 1.25rem; }
-  .card .label { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
-  .card .value { font-size: 1.75rem; font-weight: 700; color: #f8fafc; margin-top: .25rem; }
-  .card .sub { font-size: .8rem; color: #64748b; margin-top: .15rem; }
-
-  .section { background: #1e293b; border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
-  .section h2 { font-size: 1rem; color: #f8fafc; margin-bottom: 1rem; }
-
-  /* Adapter health cards */
-  .adapters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
-  .adapter-card { background: #0f172a; border-radius: 8px; padding: 1rem; border: 1px solid #334155; }
-  .adapter-card .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .4rem; vertical-align: middle; }
-  .adapter-card .status-dot.up { background: #22c55e; }
-  .adapter-card .status-dot.down { background: #ef4444; }
-  .adapter-card .adapter-name { font-weight: 600; font-size: .95rem; }
-  .adapter-card .adapter-meta { font-size: .8rem; color: #94a3b8; margin-top: .35rem; }
-
-  /* Bar chart */
-  .bar-chart { display: flex; flex-direction: column; gap: .4rem; }
-  .bar-row { display: flex; align-items: center; gap: .75rem; }
-  .bar-label { width: 200px; font-size: .8rem; color: #cbd5e1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-  .bar-track { flex: 1; background: #0f172a; border-radius: 4px; height: 20px; overflow: hidden; }
-  .bar-fill { height: 100%; background: #6366f1; border-radius: 4px; transition: width .3s; min-width: 2px; }
-  .bar-count { width: 50px; font-size: .8rem; color: #94a3b8; }
-
-  /* Source breakdown */
-  .source-list { display: flex; flex-wrap: wrap; gap: .5rem; }
-  .source-chip { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: .4rem .75rem; font-size: .8rem; }
-  .source-chip .source-name { color: #cbd5e1; }
-  .source-chip .source-count { color: #6366f1; font-weight: 600; margin-left: .35rem; }
-
-  /* Recent calls table */
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-  th { text-align: left; color: #94a3b8; font-weight: 500; padding: .5rem .6rem; border-bottom: 1px solid #334155; }
-  td { padding: .5rem .6rem; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
-  .status-badge { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .75rem; font-weight: 500; }
-  .status-badge.success { background: #052e16; color: #4ade80; }
-  .status-badge.error { background: #450a0a; color: #f87171; }
-
-  .sessions-badge { font-size: .8rem; color: #94a3b8; background: #0f172a; padding: .25rem .6rem; border-radius: 6px; }
-
-  .empty { text-align: center; color: #64748b; padding: 2rem; }
-  .refresh-note { font-size: .75rem; color: #475569; text-align: right; margin-top: .5rem; }
+  body {
+    background: var(--cds-background, #161616);
+  }
+  /* Gauge container */
+  .gauge-container {
+    width: 100%;
+    height: 120px;
+    position: relative;
+    margin-top: 0.25rem;
+  }
+  /* Override Carbon Charts background for g100 theme */
+  .bx--chart-holder,
+  .cds--chart-holder {
+    background: transparent !important;
+  }
 </style>
 </head>
-<body>
-<div class="header">
-  <h1>Robin MCP Dashboard</h1>
-  <div class="nav">
-    <span class="sessions-badge" id="sessions">0 sessions</span>
-    <a href="/dashboard" class="active">Overview</a>
-    <a href="/dashboard/routing">Routing</a>
-    <select class="period-select" id="periodSelect">
-      <option value="24h">Last 24h</option>
-      <option value="7d" selected>Last 7 days</option>
-      <option value="30d">Last 30 days</option>
-      <option value="all">All time</option>
-    </select>
+<body class="cds-theme-zone-g100">
+<div class="page-container">
+
+  <!-- Header -->
+  <div class="dashboard-header">
+    <h1>Robin MCP Dashboard</h1>
+    <div class="header-controls">
+      <cds-tag type="gray" id="sessions">0 sessions</cds-tag>
+      <cds-tabs type="contained" value="overview" id="navTabs">
+        <cds-tab value="overview" selected>Overview</cds-tab>
+        <cds-tab value="routing">Routing</cds-tab>
+      </cds-tabs>
+      <cds-dropdown
+        id="periodSelect"
+        value="7d"
+        label="Time period"
+        hide-label
+        size="sm"
+      >
+        <cds-dropdown-item value="24h">Last 24h</cds-dropdown-item>
+        <cds-dropdown-item value="7d">Last 7 days</cds-dropdown-item>
+        <cds-dropdown-item value="30d">Last 30 days</cds-dropdown-item>
+        <cds-dropdown-item value="all">All time</cds-dropdown-item>
+      </cds-dropdown>
+    </div>
   </div>
-</div>
 
-<!-- Overview Cards -->
-<div class="cards" id="overviewCards">
-  <div class="card"><div class="label">Total Calls</div><div class="value" id="totalCalls">—</div></div>
-  <div class="card"><div class="label">Success Rate</div><div class="value" id="successRate">—</div></div>
-  <div class="card"><div class="label">Avg Response</div><div class="value" id="avgDuration">—</div><div class="sub">ms</div></div>
-  <div class="card"><div class="label">Est. Tokens</div><div class="value" id="estTokens">—</div></div>
-</div>
-
-<!-- Adapter Health -->
-<div class="section">
-  <h2>Adapter Health</h2>
-  <div class="adapters" id="adapterHealth">
-    <p class="empty">Loading...</p>
+  <!-- KPI Cards -->
+  <div class="cards-grid" id="overviewCards">
+    <cds-tile>
+      <div class="kpi-label">Total Calls</div>
+      <div class="kpi-value" id="totalCalls">&mdash;</div>
+    </cds-tile>
+    <cds-tile>
+      <div class="kpi-label">Success Rate</div>
+      <div class="kpi-value" id="successRateValue">&mdash;</div>
+      <div class="gauge-container" id="successGauge"></div>
+    </cds-tile>
+    <cds-tile>
+      <div class="kpi-label">Avg Response</div>
+      <div class="kpi-value" id="avgDuration">&mdash;</div>
+      <div class="kpi-sub">ms</div>
+    </cds-tile>
+    <cds-tile>
+      <div class="kpi-label">Est. Tokens</div>
+      <div class="kpi-value" id="estTokens">&mdash;</div>
+    </cds-tile>
   </div>
-</div>
 
-<!-- Tool Usage Chart -->
-<div class="section">
-  <h2>Tool Usage</h2>
-  <div class="bar-chart" id="toolChart">
-    <p class="empty">Loading...</p>
+  <!-- Adapter Health -->
+  <div class="section-tile">
+    <cds-tile>
+      <h2 class="section-title">Adapter Health</h2>
+      <div class="adapters-grid" id="adapterHealth">
+        <p class="empty-state">Loading...</p>
+      </div>
+    </cds-tile>
   </div>
-</div>
 
-<!-- Source Breakdown -->
-<div class="section">
-  <h2>Source Popularity</h2>
-  <div class="source-list" id="sourceBreakdown">
-    <p class="empty">Loading...</p>
+  <!-- Tool Usage Chart -->
+  <div class="section-tile">
+    <cds-tile>
+      <h2 class="section-title">Tool Usage</h2>
+      <div class="chart-container" id="toolChart">
+        <p class="empty-state">Loading...</p>
+      </div>
+    </cds-tile>
   </div>
-</div>
 
-<!-- Recent Calls -->
-<div class="section">
-  <h2>Recent Calls</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Tool</th><th>Source</th><th>Status</th><th>Duration</th><th>Tokens</th><th>Time</th></tr></thead>
-      <tbody id="recentCalls"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
-    </table>
+  <!-- Source Popularity Chart -->
+  <div class="section-tile">
+    <cds-tile>
+      <h2 class="section-title">Source Popularity</h2>
+      <div class="chart-container" id="sourceChart">
+        <p class="empty-state">Loading...</p>
+      </div>
+    </cds-tile>
   </div>
-</div>
 
-<div class="refresh-note">Auto-refreshes every 30s</div>
+  <!-- Recent Calls Table -->
+  <div class="section-tile">
+    <cds-tile>
+      <h2 class="section-title">Recent Calls</h2>
+      <div id="recentCallsContainer">
+        <cds-table>
+          <cds-table-head>
+            <cds-table-header-row>
+              <cds-table-header-cell>Tool</cds-table-header-cell>
+              <cds-table-header-cell>Source</cds-table-header-cell>
+              <cds-table-header-cell>Status</cds-table-header-cell>
+              <cds-table-header-cell>Duration</cds-table-header-cell>
+              <cds-table-header-cell>Tokens</cds-table-header-cell>
+              <cds-table-header-cell>Time</cds-table-header-cell>
+            </cds-table-header-row>
+          </cds-table-head>
+          <cds-table-body id="recentCalls">
+            <cds-table-row>
+              <cds-table-cell colspan="6"><span class="empty-state">Loading...</span></cds-table-cell>
+            </cds-table-row>
+          </cds-table-body>
+        </cds-table>
+      </div>
+    </cds-tile>
+  </div>
+
+  <div class="refresh-note">Auto-refreshes every 30s</div>
+
+</div>
 
 <script>
 const API = '/dashboard/api';
 let period = '7d';
+const chartInstances = new Map();
 
 function fmt(n) {
-  if (n == null) return '—';
+  if (n == null) return '\u2014';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return String(n);
 }
 
 function relTime(iso) {
-  if (!iso) return '—';
+  if (!iso) return '\u2014';
   const d = new Date(iso + 'Z');
   const diff = (Date.now() - d.getTime()) / 1000;
   if (diff < 60) return Math.round(diff) + 's ago';
@@ -152,37 +178,175 @@ async function fetchJson(url) {
   return res.json();
 }
 
+function destroyChart(key) {
+  if (chartInstances.has(key)) {
+    try { chartInstances.get(key).destroy(); } catch {}
+    chartInstances.delete(key);
+  }
+}
+
+function destroyAllCharts() {
+  for (const key of chartInstances.keys()) {
+    destroyChart(key);
+  }
+}
+
 async function loadStats() {
   const data = await fetchJson(API + '/stats?period=' + period);
 
   document.getElementById('totalCalls').textContent = fmt(data.totalCalls);
-  document.getElementById('successRate').textContent = data.successRate + '%';
   document.getElementById('avgDuration').textContent = fmt(data.avgDurationMs);
   document.getElementById('estTokens').textContent = fmt(data.estimatedTokens);
 
-  // Tool chart
-  const chart = document.getElementById('toolChart');
-  if (!data.topTools || data.topTools.length === 0) {
-    chart.innerHTML = '<p class="empty">No tool calls yet</p>';
-  } else {
-    const max = data.topTools[0].calls;
-    chart.innerHTML = data.topTools.map(t =>
-      '<div class="bar-row">' +
-        '<span class="bar-label" title="' + t.tool_name + '">' + t.tool_name + '</span>' +
-        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(2, (t.calls / max) * 100) + '%"></div></div>' +
-        '<span class="bar-count">' + t.calls + '</span>' +
+  // Success rate value
+  const successRate = data.successRate != null ? data.successRate : 0;
+  document.getElementById('successRateValue').textContent = successRate + '%';
+
+  // Gauge chart for success rate
+  renderGauge(successRate);
+
+  // Tool usage bar chart
+  renderToolChart(data.topTools || []);
+
+  // Source popularity donut chart
+  renderSourceChart(data.sourceBreakdown || []);
+}
+
+function renderGauge(rate) {
+  const container = document.getElementById('successGauge');
+  destroyChart('gauge');
+  container.innerHTML = '';
+
+  if (rate == null) return;
+
+  let status;
+  if (rate >= 95) status = 'success';
+  else if (rate >= 80) status = 'warning';
+  else status = 'danger';
+
+  try {
+    const chart = new Charts.GaugeChart(container, {
+      data: [{ group: 'value', value: rate }],
+      options: {
+        theme: 'g100',
+        resizable: true,
+        height: '120px',
+        gauge: {
+          type: 'semi',
+          status: status
+        },
+        color: {
+          scale: {
+            value: rate >= 95 ? '#42be65' : rate >= 80 ? '#f1c21b' : '#fa4d56'
+          }
+        },
+        legend: { enabled: false },
+        toolbar: { enabled: false }
+      }
+    });
+    chartInstances.set('gauge', chart);
+  } catch (e) {
+    container.innerHTML = '<span style="color:' +
+      (rate >= 95 ? '#42be65' : rate >= 80 ? '#f1c21b' : '#fa4d56') +
+      ';font-size:1.25rem;font-weight:600">' + rate + '%</span>';
+  }
+}
+
+function renderToolChart(topTools) {
+  const container = document.getElementById('toolChart');
+  destroyChart('tools');
+  container.innerHTML = '';
+
+  if (!topTools || topTools.length === 0) {
+    container.innerHTML = '<p class="empty-state">No tool calls yet</p>';
+    return;
+  }
+
+  try {
+    const chartData = topTools.map(t => ({ group: t.tool_name, value: t.calls }));
+    const chart = new Charts.SimpleBarChart(container, {
+      data: chartData,
+      options: {
+        theme: 'g100',
+        resizable: true,
+        height: '250px',
+        bars: {
+          orientation: 'horizontal',
+          maxWidth: 24
+        },
+        axes: {
+          left: {
+            mapsTo: 'group',
+            scaleType: 'labels',
+            truncation: {
+              type: 'mid_line',
+              threshold: 20
+            }
+          },
+          bottom: {
+            mapsTo: 'value'
+          }
+        },
+        legend: { enabled: false },
+        toolbar: { enabled: false },
+        color: {
+          scale: { [chartData[0]?.group]: '#6366f1' }
+        }
+      }
+    });
+    chartInstances.set('tools', chart);
+  } catch (e) {
+    // Fallback to simple CSS bars
+    const max = topTools[0].calls;
+    container.innerHTML = topTools.map(t =>
+      '<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.4rem">' +
+        '<span style="width:200px;font-size:.8rem;color:#c6c6c6;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">' + t.tool_name + '</span>' +
+        '<div style="flex:1;background:#262626;border-radius:4px;height:20px;overflow:hidden">' +
+          '<div style="height:100%;background:#6366f1;border-radius:4px;width:' + Math.max(2, (t.calls / max) * 100) + '%"></div>' +
+        '</div>' +
+        '<span style="width:50px;font-size:.8rem;color:#8d8d8d">' + t.calls + '</span>' +
       '</div>'
     ).join('');
   }
+}
 
-  // Source breakdown
-  const sb = document.getElementById('sourceBreakdown');
-  if (!data.sourceBreakdown || data.sourceBreakdown.length === 0) {
-    sb.innerHTML = '<p class="empty">No data</p>';
-  } else {
-    sb.innerHTML = data.sourceBreakdown.map(s =>
-      '<span class="source-chip"><span class="source-name">' + s.source_id + '</span><span class="source-count">' + s.calls + '</span></span>'
-    ).join('');
+function renderSourceChart(sourceBreakdown) {
+  const container = document.getElementById('sourceChart');
+  destroyChart('source');
+  container.innerHTML = '';
+
+  if (!sourceBreakdown || sourceBreakdown.length === 0) {
+    container.innerHTML = '<p class="empty-state">No data</p>';
+    return;
+  }
+
+  try {
+    const chartData = sourceBreakdown.map(s => ({ group: s.source_id, value: s.calls }));
+    const chart = new Charts.DonutChart(container, {
+      data: chartData,
+      options: {
+        theme: 'g100',
+        resizable: true,
+        height: '250px',
+        donut: {
+          center: {
+            label: 'Calls'
+          }
+        },
+        legend: {
+          alignment: 'center',
+          position: 'bottom'
+        },
+        toolbar: { enabled: false }
+      }
+    });
+    chartInstances.set('source', chart);
+  } catch (e) {
+    // Fallback to tag chips
+    container.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:.5rem">' +
+      sourceBreakdown.map(s =>
+        '<cds-tag type="gray">' + s.source_id + ' (' + s.calls + ')</cds-tag>'
+      ).join('') + '</div>';
   }
 }
 
@@ -191,23 +355,76 @@ async function loadHealth() {
   const container = document.getElementById('adapterHealth');
 
   if (!data.latest || data.latest.length === 0) {
-    container.innerHTML = '<p class="empty">No adapter data yet</p>';
+    container.innerHTML = '<p class="empty-state">No adapter data yet</p>';
     return;
   }
 
-  container.innerHTML = data.latest.map(a =>
-    '<div class="adapter-card">' +
-      '<span class="status-dot ' + a.status + '"></span>' +
-      '<span class="adapter-name">' + a.adapter_id + '</span>' +
+  container.innerHTML = data.latest.map((a, i) => {
+    const sparkId = 'spark-' + i;
+    return '<cds-tile class="adapter-tile">' +
+      '<div class="adapter-header">' +
+        '<span class="status-dot ' + a.status + '"></span>' +
+        '<span class="adapter-name">' + a.adapter_id + '</span>' +
+        '<cds-tag type="' + (a.status === 'up' ? 'green' : 'red') + '" size="sm">' + a.status + '</cds-tag>' +
+      '</div>' +
       '<div class="adapter-meta">' +
         (a.tool_count != null ? a.tool_count + ' tools' : '') +
         (a.resource_count != null ? ' &middot; ' + a.resource_count + ' resources' : '') +
         ' &middot; ' + a.init_duration_ms + 'ms init' +
-        (a.error_message ? '<br><span style="color:#f87171">' + a.error_message + '</span>' : '') +
       '</div>' +
+      (a.error_message ? '<div class="adapter-error">' + a.error_message + '</div>' : '') +
       '<div class="adapter-meta">' + relTime(a.checked_at) + '</div>' +
-    '</div>'
-  ).join('');
+      '<div class="chart-container-small" id="' + sparkId + '"></div>' +
+    '</cds-tile>';
+  }).join('');
+
+  // Render sparklines if history data exists
+  if (data.history) {
+    data.latest.forEach((a, i) => {
+      const history = data.history[a.adapter_id];
+      if (history && history.length > 1) {
+        renderSparkline('spark-' + i, history);
+      }
+    });
+  }
+}
+
+function renderSparkline(containerId, history) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const key = 'spark-' + containerId;
+  destroyChart(key);
+
+  try {
+    const chartData = history.map(h => ({
+      group: 'status',
+      date: new Date(h.checked_at + 'Z'),
+      value: h.status === 'up' ? 1 : 0
+    }));
+
+    const chart = new Charts.LineChart(container, {
+      data: chartData,
+      options: {
+        theme: 'g100',
+        resizable: true,
+        height: '48px',
+        axes: {
+          bottom: { visible: false, mapsTo: 'date', scaleType: 'time' },
+          left: { visible: false, mapsTo: 'value' }
+        },
+        grid: { x: { enabled: false }, y: { enabled: false } },
+        legend: { enabled: false },
+        toolbar: { enabled: false },
+        points: { enabled: false },
+        color: {
+          scale: { status: '#42be65' }
+        }
+      }
+    });
+    chartInstances.set(key, chart);
+  } catch (e) {
+    // Sparkline failed silently — no fallback needed
+  }
 }
 
 async function loadRecent() {
@@ -215,39 +432,59 @@ async function loadRecent() {
   const tbody = document.getElementById('recentCalls');
 
   if (!data.data || data.data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">No tool calls yet</td></tr>';
+    tbody.innerHTML = '<cds-table-row><cds-table-cell colspan="6"><span class="empty-state">No tool calls yet</span></cds-table-cell></cds-table-row>';
     return;
   }
 
   tbody.innerHTML = data.data.map(r =>
-    '<tr>' +
-      '<td>' + r.tool_name + '</td>' +
-      '<td>' + (r.source_id || '—') + '</td>' +
-      '<td><span class="status-badge ' + r.status + '">' + r.status + '</span></td>' +
-      '<td>' + (r.duration_ms != null ? r.duration_ms + 'ms' : '—') + '</td>' +
-      '<td>' + fmt(r.token_estimate) + '</td>' +
-      '<td>' + relTime(r.called_at) + '</td>' +
-    '</tr>'
+    '<cds-table-row>' +
+      '<cds-table-cell>' + r.tool_name + '</cds-table-cell>' +
+      '<cds-table-cell>' + (r.source_id || '\u2014') + '</cds-table-cell>' +
+      '<cds-table-cell><cds-tag type="' + (r.status === 'success' ? 'green' : 'red') + '" size="sm">' + r.status + '</cds-tag></cds-table-cell>' +
+      '<cds-table-cell>' + (r.duration_ms != null ? r.duration_ms + 'ms' : '\u2014') + '</cds-table-cell>' +
+      '<cds-table-cell>' + fmt(r.token_estimate) + '</cds-table-cell>' +
+      '<cds-table-cell>' + relTime(r.called_at) + '</cds-table-cell>' +
+    '</cds-table-row>'
   ).join('');
 }
 
 async function loadSessions() {
   const data = await fetchJson(API + '/sessions');
-  document.getElementById('sessions').textContent = data.active + ' session' + (data.active !== 1 ? 's' : '');
+  const badge = document.getElementById('sessions');
+  badge.textContent = data.active + ' session' + (data.active !== 1 ? 's' : '');
 }
 
 async function refresh() {
-  try { await Promise.all([loadStats(), loadHealth(), loadRecent(), loadSessions()]); }
-  catch (err) { console.error('Dashboard refresh error:', err); }
+  try {
+    await Promise.all([loadStats(), loadHealth(), loadRecent(), loadSessions()]);
+  } catch (err) {
+    console.error('Dashboard refresh error:', err);
+  }
 }
 
-document.getElementById('periodSelect').addEventListener('change', (e) => {
-  period = e.target.value;
-  refresh();
+// Tab navigation
+document.getElementById('navTabs').addEventListener('cds-tabs-selected', (e) => {
+  const val = e.detail?.item?.getAttribute('value') || e.target.value;
+  if (val === 'routing') {
+    window.location.href = '/dashboard/routing';
+  }
+});
+
+// Period dropdown
+document.getElementById('periodSelect').addEventListener('cds-dropdown-selected', (e) => {
+  const item = e.detail?.item;
+  if (item) {
+    period = item.getAttribute('value') || '7d';
+    destroyAllCharts();
+    refresh();
+  }
 });
 
 refresh();
-setInterval(refresh, 30000);
+setInterval(() => {
+  destroyAllCharts();
+  refresh();
+}, 30000);
 </script>
 </body>
 </html>

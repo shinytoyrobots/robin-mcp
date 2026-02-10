@@ -1,4 +1,5 @@
 import { Router } from "express";
+import express from "express";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,6 +17,12 @@ export function createDashboardRouter(
   sessions: Map<string, unknown>,
 ): Router {
   const router = Router();
+
+  // Static assets (CSS) — public, no auth required
+  router.use(
+    "/assets",
+    express.static(path.resolve(__dirname, "views"), { maxAge: "1h" }),
+  );
 
   // Login page is public (no auth middleware)
   router.get("/login", (_req, res) => {

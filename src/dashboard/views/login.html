@@ -4,36 +4,79 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robin MCP — Login</title>
+<!-- IBM Plex Sans -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/plex/sans.css">
+<!-- Carbon Themes (g100 dark) -->
+<link rel="stylesheet" href="https://1.www.s81c.com/common/carbon/web-components/tag/latest/themes.css">
+<!-- Shared styles -->
+<link rel="stylesheet" href="/dashboard/assets/shared.css">
+<!-- Carbon Web Components -->
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/tile.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/text-input.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/button.min.js"></script>
+<script type="module" src="https://1.www.s81c.com/common/carbon/web-components/tag/v2/latest/notification.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .card { background: #1e293b; border-radius: 12px; padding: 2rem; width: 100%; max-width: 400px; box-shadow: 0 4px 24px rgba(0,0,0,.3); }
-  h1 { font-size: 1.25rem; margin-bottom: 1.5rem; color: #f8fafc; }
-  label { display: block; font-size: .85rem; color: #94a3b8; margin-bottom: .5rem; }
-  input { width: 100%; padding: .6rem .75rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: .95rem; outline: none; }
-  input:focus { border-color: #6366f1; }
-  button { width: 100%; padding: .65rem; border: none; border-radius: 6px; background: #6366f1; color: #fff; font-size: .95rem; cursor: pointer; margin-top: 1rem; }
-  button:hover { background: #4f46e5; }
-  .error { color: #f87171; font-size: .85rem; margin-top: .75rem; display: none; }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: var(--cds-background, #161616);
+  }
+  .login-tile {
+    width: 100%;
+    max-width: 400px;
+    padding: 2rem;
+  }
+  .login-tile h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: var(--cds-text-primary, #f4f4f4);
+  }
+  cds-text-input {
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+  cds-button {
+    width: 100%;
+  }
+  cds-inline-notification {
+    margin-top: 1rem;
+  }
 </style>
 </head>
-<body>
-<div class="card">
+<body class="cds-theme-zone-g100">
+<cds-tile class="login-tile">
   <h1>Robin MCP Dashboard</h1>
-  <form id="loginForm">
-    <label for="token">Access Token</label>
-    <input type="password" id="token" name="token" placeholder="Enter your token" autofocus>
-    <button type="submit">Sign in</button>
-    <p class="error" id="error">Invalid token. Please try again.</p>
+  <form id="loginForm" autocomplete="off" data-form-type="other" data-dashlane-rid="no-save">
+    <cds-text-input
+      type="password"
+      id="token"
+      label="Access Token"
+      placeholder="Enter your token"
+      autocomplete="off"
+      data-form-type="other"
+      autofocus
+    ></cds-text-input>
+    <cds-button id="signInBtn">Sign in</cds-button>
+    <cds-inline-notification
+      id="error"
+      kind="error"
+      title="Authentication failed"
+      subtitle="Invalid token. Please try again."
+      low-contrast
+      hide-close-button
+      style="display:none"
+    ></cds-inline-notification>
   </form>
-</div>
+</cds-tile>
 <script>
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const token = document.getElementById('token').value.trim();
+async function doLogin() {
+  const inputEl = document.getElementById('token');
+  const token = (inputEl.value || '').trim();
   if (!token) return;
 
-  // Verify token by calling a simple API endpoint
   const res = await fetch('/dashboard/api/sessions', {
     headers: { 'Authorization': 'Bearer ' + token }
   });
@@ -44,6 +87,11 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   } else {
     document.getElementById('error').style.display = 'block';
   }
+}
+
+document.getElementById('signInBtn').addEventListener('click', doLogin);
+document.getElementById('token').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
 });
 </script>
 </body>
