@@ -9,6 +9,10 @@ interface GitHubContent {
   size?: number;
 }
 
+function encodeRepoPath(filePath: string): string {
+  return filePath.split("/").map(encodeURIComponent).join("/");
+}
+
 async function githubApi(endpoint: string): Promise<Response> {
   return fetch(`https://api.github.com${endpoint}`, {
     headers: {
@@ -21,7 +25,7 @@ async function githubApi(endpoint: string): Promise<Response> {
 
 async function listTree(dirPath: string): Promise<string> {
   const response = await githubApi(
-    `/repos/${config.vaultRepo}/contents/${encodeURIComponent(dirPath)}`
+    `/repos/${config.vaultRepo}/contents/${encodeRepoPath(dirPath)}`
   );
   if (!response.ok) {
     return `  (error listing ${dirPath}: ${response.status})`;
@@ -85,7 +89,7 @@ export function registerVaultTools(server: McpServer): void {
     },
     async ({ path: filePath }) => {
       const response = await githubApi(
-        `/repos/${config.vaultRepo}/contents/${encodeURIComponent(filePath)}`
+        `/repos/${config.vaultRepo}/contents/${encodeRepoPath(filePath)}`
       );
 
       if (!response.ok) {
@@ -150,7 +154,7 @@ export function registerVaultTools(server: McpServer): void {
     },
     async ({ path: dirPath }) => {
       const response = await githubApi(
-        `/repos/${config.vaultRepo}/contents/${encodeURIComponent(dirPath)}`
+        `/repos/${config.vaultRepo}/contents/${encodeRepoPath(dirPath)}`
       );
 
       if (!response.ok) {
