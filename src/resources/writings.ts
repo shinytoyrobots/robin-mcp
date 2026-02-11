@@ -27,12 +27,6 @@ export function registerWritingsResources(server: McpServer): void {
   const getAlternateFrequencies = cachedFetch(() =>
     fetchSubstackListing("https://www.robin-cannon.com/p/alternate-frequencies", "Alternate Frequencies")
   );
-  const getStaticDrift = cachedFetch(() =>
-    fetchSubstackListing("https://www.robin-cannon.com/t/staticdrift", "Static Drift (tagged posts)")
-  );
-  const getTomCannon = cachedFetch(() =>
-    fetchWebsiteContent("https://www.liverpool.ac.uk/people/tom-cannon/research-outputs")
-  );
 
   server.resource(
     "personal-website",
@@ -95,21 +89,6 @@ export function registerWritingsResources(server: McpServer): void {
   );
 
   server.resource(
-    "static-drift-posts",
-    "robin://writings/static-drift",
-    { description: "Posts tagged 'staticdrift' — fiction set in the Static Drift universe" },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.toString(),
-          mimeType: "text/plain",
-          text: await getStaticDrift(),
-        },
-      ],
-    })
-  );
-
-  server.resource(
     "linkedin-profile",
     "robin://writings/linkedin",
     { description: "LinkedIn profile link" },
@@ -124,18 +103,4 @@ export function registerWritingsResources(server: McpServer): void {
     })
   );
 
-  server.resource(
-    "tom-cannon-research",
-    "robin://writings/tom-cannon-research",
-    { description: "Published academic research outputs by Prof Tom Cannon at University of Liverpool — books, papers, and reports on business, management, and entrepreneurship" },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.toString(),
-          mimeType: "text/plain",
-          text: await getTomCannon(),
-        },
-      ],
-    })
-  );
 }

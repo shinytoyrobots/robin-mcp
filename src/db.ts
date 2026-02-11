@@ -95,7 +95,7 @@ function initSchema(db: Database.Database): void {
 
   seedDefaultSources(db);
   seedDefaultContexts(db);
-  migrateTomCannonSource(db);
+  migrateRemoveStaleSourcesV1(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -194,35 +194,35 @@ function seedDefaultContexts(db: Database.Database): void {
   seed();
 }
 
-function migrateTomCannonSource(db: Database.Database): void {
-  const existing = db.prepare("SELECT id FROM sources WHERE id = 'tom-cannon-research'").get();
-  if (existing) return;
+/**
+ * Remove sources that are redundant or lack a good data source.
+ * - writings-static-drift: all content is in the Creative Vault
+ * - tom-cannon-research: Liverpool Uni page is too heavy; will re-add when a better source is found
+ */
+function migrateRemoveStaleSourcesV1(db: Database.Database): void {
+  const staleIds = ["writings-static-drift", "tom-cannon-research"];
+  const existing = db
+    .prepare(`SELECT id FROM sources WHERE id IN (${staleIds.map(() => "?").join(",")})`)
+    .all(...staleIds) as Array<{ id: string }>;
+
+  if (existing.length === 0) return;
 
   const migrate = db.transaction(() => {
-    db.prepare(
-      "INSERT INTO sources (id, name, description, tools, resources) VALUES (?, ?, ?, ?, ?)"
-    ).run(
-      "tom-cannon-research",
-      "Tom Cannon Research Outputs",
-      "Published academic research by Prof Tom Cannon — books, papers, and reports on business, management, and entrepreneurship",
-      "http-fetch",
-      "robin://writings/tom-cannon-research",
-    );
+    for (const { id } of existing) {
+      const contexts = db
+        .prepare("SELECT DISTINCT context FROM source_rules WHERE source_id = ?")
+        .all(id) as Array<{ context: string }>;
 
-    // Append at bottom of relevant contexts
-    const appendRule = (context: string, reason: string) => {
-      const maxRow = db
-        .prepare("SELECT COALESCE(MAX(priority), 0) as max_p FROM source_rules WHERE context = ?")
-        .get(context) as { max_p: number };
-      db.prepare(
-        "INSERT OR IGNORE INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)"
-      ).run(context, "tom-cannon-research", maxRow.max_p + 1, reason);
-    };
+      db.prepare("DELETE FROM source_rules WHERE source_id = ?").run(id);
+      db.prepare("DELETE FROM sources WHERE id = ?").run(id);
 
-    appendRule("personal-brand", "Tom Cannon's academic research outputs provide professional/family context");
-    appendRule("research", "Tom Cannon's published academic research on business, management, and entrepreneurship");
+      for (const { context } of contexts) {
+        compactPriorities(db, context);
+      }
+
+      console.error(`[db] Removed stale source: ${id}`);
+    }
   });
-
   migrate();
 }
 
@@ -242,11 +242,9 @@ function seedDefaultSources(db: Database.Database): void {
     insertSource.run("kb-notes", "Knowledge Base Notes", "Personal notes with full-text search", "create-note,search-notes,get-note,update-note,delete-note", "robin://kb/tags,robin://kb/stats");
     insertSource.run("kb-bookmarks", "Knowledge Base Bookmarks", "Saved URLs and references", "save-bookmark,search-bookmarks,delete-bookmark", "");
     insertSource.run("writings", "Personal Writings", "Website, blog posts, and LinkedIn profile", "", "robin://writings/website,robin://writings/blog-posts,robin://writings/linkedin,robin://writings/shiny-toy-robots,robin://writings/alternate-frequencies");
-    insertSource.run("writings-static-drift", "Static Drift (Website)", "Published Static Drift fiction and posts tagged 'staticdrift' on robin-cannon.com", "", "robin://writings/static-drift");
     insertSource.run("github", "GitHub", "GitHub repo search and API access", "github-search-repos,http-fetch", "");
     insertSource.run("vault", "Creative Vault", "StaticDrift fiction universe - private creative writing repo", "vault-read-file,vault-list-dir", "robin://vault/structure");
     insertSource.run("linear", "Linear", "Project management - issues, teams, assignments", "linear-search-issues,linear-get-issue,linear-my-issues,linear-create-issue", "robin://linear/teams");
-    insertSource.run("tom-cannon-research", "Tom Cannon Research Outputs", "Published academic research by Prof Tom Cannon — books, papers, and reports on business, management, and entrepreneurship", "http-fetch", "robin://writings/tom-cannon-research");
 
     // Contextual rules (priority: 1 = most preferred)
     // Code & engineering
@@ -265,20 +263,17 @@ function seedDefaultSources(db: Database.Database): void {
 
     // Static Drift universe specifically
     insertRule.run("static-drift", "vault", 1, "The StaticDrift folder in the creative vault is the canonical source for the Static Drift universe");
-    insertRule.run("static-drift", "writings-static-drift", 2, "Published Static Drift posts on robin-cannon.com tagged 'staticdrift'");
-    insertRule.run("static-drift", "writings", 3, "Shiny Toy Robots and Alternate Frequencies may contain related creative pieces");
-    insertRule.run("static-drift", "kb-notes", 4, "Notes may contain world-building ideas or story planning");
+    insertRule.run("static-drift", "writings", 2, "Shiny Toy Robots and Alternate Frequencies may contain related creative pieces");
+    insertRule.run("static-drift", "kb-notes", 3, "Notes may contain world-building ideas or story planning");
 
     // Personal brand & public content
     insertRule.run("personal-brand", "writings", 1, "Website and blog are the canonical public presence");
     insertRule.run("personal-brand", "kb-bookmarks", 2, "Bookmarks may track published content or press");
-    insertRule.run("personal-brand", "tom-cannon-research", 3, "Tom Cannon's academic research outputs provide professional/family context");
 
     // Research & reference
     insertRule.run("research", "kb-notes", 1, "Notes are the primary place to store research findings");
     insertRule.run("research", "kb-bookmarks", 2, "Bookmarks save reference material");
     insertRule.run("research", "github", 3, "GitHub repos can be research references");
-    insertRule.run("research", "tom-cannon-research", 4, "Tom Cannon's published academic research on business, management, and entrepreneurship");
 
     // General / catch-all
     insertRule.run("general", "kb-notes", 1, "Notes are the most versatile knowledge store");
