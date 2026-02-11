@@ -19,6 +19,30 @@ export class McpProxyAdapter implements SourceAdapter {
     this.config = config;
   }
 
+  /**
+   * Sanitize error messages that may contain raw HTML (e.g. Cloudflare challenge pages).
+   * Returns a clean, short error message suitable for MCP tool results.
+   */
+  private sanitizeError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+
+    // Detect HTML content in the error (Cloudflare pages, proxy errors, etc.)
+    if (/<html/i.test(raw) || /<head/i.test(raw) || /<body/i.test(raw)) {
+      // Try to extract the HTTP status code from StreamableHTTPError
+      const statusMatch = raw.match(/^Streamable HTTP error:\s*/);
+      const code = (err as { code?: number }).code;
+
+      // Try to extract a <title> from the HTML for a hint
+      const titleMatch = raw.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const hint = titleMatch ? titleMatch[1].trim() : "upstream returned an HTML error page";
+
+      const status = code ? ` (HTTP ${code})` : "";
+      return `Adapter "${this.config.id}" error${status}: ${hint}. The upstream server may be behind a firewall or CDN challenge.`;
+    }
+
+    return raw;
+  }
+
   async initialize(): Promise<void> {
     const transport = this.config.transport === "stdio"
       ? new StdioClientTransport({
@@ -57,7 +81,12 @@ export class McpProxyAdapter implements SourceAdapter {
     }
 
     const t0 = Date.now();
-    await this.client.connect(transport, requestOpts);
+    try {
+      await this.client.connect(transport, requestOpts);
+    } catch (err) {
+      this.client = null;
+      throw new Error(this.sanitizeError(err));
+    }
     console.error(`[adapter:${this.config.id}] connect() took ${Date.now() - t0}ms`);
 
     // Discover tools
@@ -105,14 +134,22 @@ export class McpProxyAdapter implements SourceAdapter {
 
   async callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
     if (!this.client) throw new Error(`Adapter ${this.config.id} not initialized`);
-    const result = await this.client.callTool({ name, arguments: args });
-    return result as CallToolResult;
+    try {
+      const result = await this.client.callTool({ name, arguments: args });
+      return result as CallToolResult;
+    } catch (err) {
+      throw new Error(this.sanitizeError(err));
+    }
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     if (!this.client) throw new Error(`Adapter ${this.config.id} not initialized`);
-    const result = await this.client.readResource({ uri });
-    return result as ReadResourceResult;
+    try {
+      const result = await this.client.readResource({ uri });
+      return result as ReadResourceResult;
+    } catch (err) {
+      throw new Error(this.sanitizeError(err));
+    }
   }
 
   async shutdown(): Promise<void> {
