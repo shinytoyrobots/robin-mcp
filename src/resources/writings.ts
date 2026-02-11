@@ -31,7 +31,7 @@ export function registerWritingsResources(server: McpServer): void {
   server.resource(
     "personal-website",
     "robin://writings/website",
-    { description: "Content from personal website" },
+    { description: "Content from robin-cannon.com — Robin Cannon's personal website on Substack" },
     async (uri) => ({
       contents: [
         {
@@ -46,7 +46,7 @@ export function registerWritingsResources(server: McpServer): void {
   server.resource(
     "blog-posts",
     "robin://writings/blog-posts",
-    { description: "Blog posts from RSS feed" },
+    { description: "Blog posts from robin-cannon.com RSS feed" },
     async (uri) => ({
       contents: [
         {

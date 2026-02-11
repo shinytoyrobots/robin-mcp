@@ -96,6 +96,7 @@ function initSchema(db: Database.Database): void {
   seedDefaultSources(db);
   seedDefaultContexts(db);
   migrateRemoveStaleSourcesV1(db);
+  migrateWritingsDescriptionV1(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -226,6 +227,14 @@ function migrateRemoveStaleSourcesV1(db: Database.Database): void {
   migrate();
 }
 
+function migrateWritingsDescriptionV1(db: Database.Database): void {
+  const newDesc = "robin-cannon.com (Substack) — website, blog posts, LinkedIn profile, and writing sections (Shiny Toy Robots, Alternate Frequencies)";
+  const row = db.prepare("SELECT description FROM sources WHERE id = 'writings'").get() as { description: string } | undefined;
+  if (!row || row.description === newDesc) return;
+  db.prepare("UPDATE sources SET description = ? WHERE id = 'writings'").run(newDesc);
+  console.error("[db] Updated writings source description to include robin-cannon.com");
+}
+
 function seedDefaultSources(db: Database.Database): void {
   const existing = db.prepare("SELECT COUNT(*) as count FROM sources").get() as { count: number };
   if (existing.count > 0) return;
@@ -241,7 +250,7 @@ function seedDefaultSources(db: Database.Database): void {
     // Sources
     insertSource.run("kb-notes", "Knowledge Base Notes", "Personal notes with full-text search", "create-note,search-notes,get-note,update-note,delete-note", "robin://kb/tags,robin://kb/stats");
     insertSource.run("kb-bookmarks", "Knowledge Base Bookmarks", "Saved URLs and references", "save-bookmark,search-bookmarks,delete-bookmark", "");
-    insertSource.run("writings", "Personal Writings", "Website, blog posts, and LinkedIn profile", "", "robin://writings/website,robin://writings/blog-posts,robin://writings/linkedin,robin://writings/shiny-toy-robots,robin://writings/alternate-frequencies");
+    insertSource.run("writings", "Personal Writings", "robin-cannon.com (Substack) — website, blog posts, LinkedIn profile, and writing sections (Shiny Toy Robots, Alternate Frequencies)", "", "robin://writings/website,robin://writings/blog-posts,robin://writings/linkedin,robin://writings/shiny-toy-robots,robin://writings/alternate-frequencies");
     insertSource.run("github", "GitHub", "GitHub repo search and API access", "github-search-repos,http-fetch", "");
     insertSource.run("vault", "Creative Vault", "StaticDrift fiction universe - private creative writing repo", "vault-read-file,vault-list-dir", "robin://vault/structure");
     insertSource.run("linear", "Linear", "Project management - issues, teams, assignments", "linear-search-issues,linear-get-issue,linear-my-issues,linear-create-issue", "robin://linear/teams");
