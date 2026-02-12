@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { config } from "../config.js";
+import { getLinearAccessToken, clearLinearToken, getLinearOAuthStatus } from "../lib/linear-oauth.js";
 
 interface LinearResponse<T> {
   data: T;
@@ -8,14 +9,24 @@ interface LinearResponse<T> {
 }
 
 async function linearQuery<T>(query: string, variables?: Record<string, unknown>): Promise<LinearResponse<T>> {
+  const token = await getLinearAccessToken();
+  if (!token) {
+    throw new Error("Linear not connected. Visit /auth/linear to authorize.");
+  }
+
   const response = await fetch("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: config.linearApiKey,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ query, variables }),
   });
+
+  if (response.status === 401) {
+    clearLinearToken();
+    throw new Error("Linear token expired or revoked. Visit /auth/linear to re-authorize.");
+  }
 
   if (!response.ok) {
     throw new Error(`Linear API error: ${response.status} ${response.statusText}`);
@@ -30,7 +41,9 @@ function formatError(errors: Array<{ message: string }> | undefined): string | n
 }
 
 export function registerLinearTools(server: McpServer, readOnly = false): void {
-  if (!config.linearApiKey) return;
+  const hasOAuth = getLinearOAuthStatus().connected;
+  const hasClientCredentials = !!(config.linearClientId && config.linearClientSecret);
+  if (!hasOAuth && !hasClientCredentials) return;
 
   // Resource: teams overview
   server.resource(

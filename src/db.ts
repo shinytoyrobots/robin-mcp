@@ -80,6 +80,17 @@ function initSchema(db: Database.Database): void {
       name TEXT PRIMARY KEY,
       description TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      provider TEXT PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      token_type TEXT NOT NULL DEFAULT 'Bearer',
+      scope TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Indexes for common query ordering
