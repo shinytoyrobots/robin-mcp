@@ -78,8 +78,10 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
     {
       query: z.string().describe("Search query"),
       limit: z.number().optional().default(20).describe("Max results (default 20)"),
+      offset: z.number().optional().default(0).describe("Number of results to skip for pagination"),
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, offset }) => {
+      const fetchCount = offset + limit;
       const result = await linearQuery<{
         searchIssues: {
           nodes: Array<{
@@ -93,8 +95,8 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
           }>;
         };
       }>(
-        `query($query: String!, $limit: Int!) {
-          searchIssues(query: $query, first: $limit) {
+        `query($query: String!, $fetchCount: Int!) {
+          searchIssues(query: $query, first: $fetchCount) {
             nodes {
               identifier title url priority
               state { name }
@@ -103,13 +105,14 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
             }
           }
         }`,
-        { query, limit }
+        { query, fetchCount }
       );
 
       const err = formatError(result.errors);
       if (err) return { content: [{ type: "text" as const, text: `Linear error: ${err}` }], isError: true };
 
-      const issues = result.data.searchIssues.nodes;
+      const allIssues = result.data.searchIssues.nodes;
+      const issues = allIssues.slice(offset, offset + limit);
       if (issues.length === 0) {
         return { content: [{ type: "text" as const, text: "No issues found." }] };
       }
@@ -119,8 +122,13 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
           `${i.identifier}: ${i.title}\n  Status: ${i.state.name} | Assignee: ${i.assignee?.name || "Unassigned"} | Priority: ${priorityLabel(i.priority)}\n  ${i.url}`
       );
 
+      const hasMore = allIssues.length > offset + limit;
+      const showing = offset > 0 || hasMore
+        ? `Showing ${offset + 1}–${offset + issues.length}${hasMore ? "+" : ""} issues`
+        : `Found ${issues.length} issue(s)`;
+
       return {
-        content: [{ type: "text" as const, text: `Found ${issues.length} issue(s):\n\n${lines.join("\n\n")}` }],
+        content: [{ type: "text" as const, text: `${showing}:\n\n${lines.join("\n\n")}` }],
       };
     }
   );
@@ -208,8 +216,10 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
       team: z.string().optional().describe("Team key to filter by, e.g. KSP"),
       status: z.string().optional().describe("Filter by status name, e.g. 'In Progress'"),
       limit: z.number().optional().default(25).describe("Max results (default 25)"),
+      offset: z.number().optional().default(0).describe("Number of results to skip for pagination"),
     },
-    async ({ team, status, limit }) => {
+    async ({ team, status, limit, offset }) => {
+      const fetchCount = offset + limit;
       const filters: string[] = ["assignee: { isMe: { eq: true } }"];
       if (team) filters.push(`team: { key: { eq: "${team}" } }`);
       if (status) filters.push(`state: { name: { eq: "${status}" } }`);
@@ -227,8 +237,8 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
           }>;
         };
       }>(
-        `query($limit: Int!) {
-          issues(filter: { ${filters.join(", ")} }, first: $limit, orderBy: updatedAt) {
+        `query($fetchCount: Int!) {
+          issues(filter: { ${filters.join(", ")} }, first: $fetchCount, orderBy: updatedAt) {
             nodes {
               identifier title url priority updatedAt
               state { name }
@@ -236,13 +246,14 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
             }
           }
         }`,
-        { limit }
+        { fetchCount }
       );
 
       const err = formatError(result.errors);
       if (err) return { content: [{ type: "text" as const, text: `Linear error: ${err}` }], isError: true };
 
-      const issues = result.data.issues.nodes;
+      const allIssues = result.data.issues.nodes;
+      const issues = allIssues.slice(offset, offset + limit);
       if (issues.length === 0) {
         return { content: [{ type: "text" as const, text: "No assigned issues found." }] };
       }
@@ -251,8 +262,13 @@ export function registerLinearTools(server: McpServer, readOnly = false): void {
         (i) => `${i.identifier}: ${i.title}\n  ${i.state.name} | P${i.priority} | Updated: ${i.updatedAt.slice(0, 10)}`
       );
 
+      const hasMore = allIssues.length > offset + limit;
+      const showing = offset > 0 || hasMore
+        ? `Showing ${offset + 1}–${offset + issues.length}${hasMore ? "+" : ""} of your issues`
+        : `Your issues (${issues.length})`;
+
       return {
-        content: [{ type: "text" as const, text: `Your issues (${issues.length}):\n\n${lines.join("\n\n")}` }],
+        content: [{ type: "text" as const, text: `${showing}:\n\n${lines.join("\n\n")}` }],
       };
     }
   );

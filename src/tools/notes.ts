@@ -51,30 +51,45 @@ export function registerNoteTools(server: McpServer, readOnly = false): void {
         .string()
         .optional()
         .describe("Filter by tag"),
+      limit: z.number().optional().default(20).describe("Max results to return (default 20)"),
+      offset: z.number().optional().default(0).describe("Number of results to skip for pagination"),
     },
-    async ({ query, tag }) => {
+    async ({ query, tag, limit, offset }) => {
       const db = getDb();
       let notes: Record<string, unknown>[];
+      let total: number;
 
       if (query) {
+        total = (db.prepare(
+          `SELECT COUNT(*) as count FROM notes_fts
+           JOIN notes ON notes.id = notes_fts.rowid
+           WHERE notes_fts MATCH ?`
+        ).get(query) as { count: number }).count;
         notes = db
           .prepare(
             `SELECT notes.* FROM notes_fts
              JOIN notes ON notes.id = notes_fts.rowid
              WHERE notes_fts MATCH ?
-             ORDER BY rank`
+             ORDER BY rank
+             LIMIT ? OFFSET ?`
           )
-          .all(query) as Record<string, unknown>[];
+          .all(query, limit, offset) as Record<string, unknown>[];
       } else if (tag) {
+        total = (db.prepare(
+          "SELECT COUNT(*) as count FROM notes WHERE ',' || tags || ',' LIKE ?"
+        ).get(`%,${tag},%`) as { count: number }).count;
         notes = db
           .prepare(
-            "SELECT * FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC"
+            "SELECT * FROM notes WHERE ',' || tags || ',' LIKE ? ORDER BY updated_at DESC LIMIT ? OFFSET ?"
           )
-          .all(`%,${tag},%`) as Record<string, unknown>[];
+          .all(`%,${tag},%`, limit, offset) as Record<string, unknown>[];
       } else {
+        total = (db.prepare(
+          "SELECT COUNT(*) as count FROM notes"
+        ).get() as { count: number }).count;
         notes = db
-          .prepare("SELECT * FROM notes ORDER BY updated_at DESC LIMIT 50")
-          .all() as Record<string, unknown>[];
+          .prepare("SELECT * FROM notes ORDER BY updated_at DESC LIMIT ? OFFSET ?")
+          .all(limit, offset) as Record<string, unknown>[];
       }
 
       if (notes.length === 0) {
@@ -90,11 +105,15 @@ export function registerNoteTools(server: McpServer, readOnly = false): void {
         )
         .join("\n");
 
+      const showing = total > notes.length
+        ? `Showing ${offset + 1}–${offset + notes.length} of ${total} notes`
+        : `Found ${total} note(s)`;
+
       return {
         content: [
           {
             type: "text" as const,
-            text: `Found ${notes.length} note(s):\n\n${summary}`,
+            text: `${showing}:\n\n${summary}`,
           },
         ],
       };
