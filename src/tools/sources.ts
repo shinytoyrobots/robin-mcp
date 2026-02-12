@@ -112,12 +112,12 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
   // Tool: get routing recommendation for a context
   server.tool(
     "get-source-routing",
-    "Get the recommended sources and tools for a given context (e.g. 'code', 'project-management', 'creative-writing')",
+    "Get the recommended sources and tools for a given context (e.g. 'code', 'product-and-project-strategy', 'creative-writing')",
     {
       context: z
         .string()
         .describe(
-          "The context to get routing for, e.g. 'code', 'project-management', 'creative-writing', 'research', 'personal-brand', 'general'"
+          "The context to get routing for, e.g. 'code', 'product-and-project-strategy', 'creative-writing', 'research', 'personal-brand', 'general'"
         ),
     },
     async ({ context }) => {

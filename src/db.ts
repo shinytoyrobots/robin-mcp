@@ -108,6 +108,7 @@ function initSchema(db: Database.Database): void {
   seedDefaultContexts(db);
   migrateRemoveStaleSourcesV1(db);
   migrateWritingsDescriptionV1(db);
+  migrateRenameProjectManagementContextV1(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -196,7 +197,7 @@ function seedDefaultContexts(db: Database.Database): void {
   const insert = db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)");
   const seed = db.transaction(() => {
     insert.run("code", "Context for writing, reviewing, or analyzing application code and engineering topics");
-    insert.run("project-management", "Tracking issues, sprints, and team work via Linear and related tools");
+    insert.run("product-and-project-strategy", "Product strategy, vision documents, roadmaps, and project tracking via Linear, Notion, and Google Docs");
     insert.run("creative-writing", "Fiction writing, story development, and creative composition");
     insert.run("static-drift", "The Static Drift speculative fiction universe — worldbuilding, stories, and lore");
     insert.run("personal-brand", "Public web presence, published writing, and professional profile");
@@ -246,6 +247,22 @@ function migrateWritingsDescriptionV1(db: Database.Database): void {
   console.error("[db] Updated writings source description to include robin-cannon.com");
 }
 
+function migrateRenameProjectManagementContextV1(db: Database.Database): void {
+  const old = db.prepare("SELECT name FROM contexts WHERE name = 'project-management'").get() as { name: string } | undefined;
+  if (!old) return;
+
+  const migrate = db.transaction(() => {
+    db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)").run(
+      "product-and-project-strategy",
+      "Product strategy, vision documents, roadmaps, and project tracking via Linear, Notion, and Google Docs"
+    );
+    db.prepare("UPDATE source_rules SET context = 'product-and-project-strategy' WHERE context = 'project-management'").run();
+    db.prepare("DELETE FROM contexts WHERE name = 'project-management'").run();
+  });
+  migrate();
+  console.error("[db] Renamed context: project-management → product-and-project-strategy");
+}
+
 function seedDefaultSources(db: Database.Database): void {
   const existing = db.prepare("SELECT COUNT(*) as count FROM sources").get() as { count: number };
   if (existing.count > 0) return;
@@ -273,8 +290,8 @@ function seedDefaultSources(db: Database.Database): void {
     insertRule.run("code", "kb-notes", 3, "Notes may contain code snippets or technical decisions");
 
     // Project management & work
-    insertRule.run("project-management", "linear", 1, "Linear is the source of truth for issues, sprints, and team work");
-    insertRule.run("project-management", "kb-notes", 2, "Notes may contain meeting notes or project context");
+    insertRule.run("product-and-project-strategy", "linear", 1, "Linear is the source of truth for issues, sprints, and team work");
+    insertRule.run("product-and-project-strategy", "kb-notes", 2, "Notes may contain meeting notes or project context");
 
     // Writing & creative
     insertRule.run("creative-writing", "vault", 1, "The creative vault is the primary source for fiction and creative work");

@@ -210,7 +210,7 @@ export class AdapterRegistry {
       );
 
       // Routing rules for work account
-      ensureRule("project-management", "gdocs-work", "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
+      ensureRule("product-and-project-strategy", "gdocs-work", "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
       ensureRule("code", "gdocs-work", "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)");
 
       // Routing rules for personal account
@@ -221,7 +221,7 @@ export class AdapterRegistry {
 
     // Routing rules for Notion adapters
     if (this.adapters.some((a) => a.config.id === "notion-work" && a.config.enabled)) {
-      ensureRule("project-management", "notion-work", "Work Notion contains project docs, specs, and team knowledge base");
+      ensureRule("product-and-project-strategy", "notion-work", "Work Notion contains project docs, specs, and team knowledge base");
       ensureRule("code", "notion-work", "Work Notion may contain technical specs, architecture docs, and engineering decisions");
     }
 
