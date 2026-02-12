@@ -87,6 +87,7 @@
     <cds-tile>
       <div class="kpi-label">Est. Tokens</div>
       <div class="kpi-value" id="estTokens">&mdash;</div>
+      <div class="kpi-sub" id="estCost" title="Estimated cost based on Claude Sonnet input pricing ($3/MTok). Actual cost varies by model and plan.">&mdash;</div>
     </cds-tile>
   </div>
 
@@ -221,6 +222,12 @@ async function loadStats() {
   document.getElementById('totalCalls').textContent = fmt(data.totalCalls);
   document.getElementById('avgDuration').textContent = fmt(data.avgDurationMs);
   document.getElementById('estTokens').textContent = fmt(data.estimatedTokens);
+
+  // Estimated cost at Claude Sonnet input pricing ($3/MTok)
+  var costUsd = (data.estimatedTokens || 0) * 3 / 1_000_000;
+  document.getElementById('estCost').textContent = costUsd < 0.01 && costUsd > 0
+    ? '< $0.01'
+    : '~$' + costUsd.toFixed(2);
 
   const successRate = data.successRate != null ? data.successRate : 0;
   document.getElementById('successRateValue').textContent = successRate + '%';
