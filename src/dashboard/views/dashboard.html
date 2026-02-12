@@ -566,7 +566,7 @@ async function loadRecent() {
     '<cds-table-row>' +
       '<cds-table-cell>' + r.tool_name + '</cds-table-cell>' +
       '<cds-table-cell>' + (r.source_id || '\u2014') + '</cds-table-cell>' +
-      '<cds-table-cell><cds-tag type="' + (r.status === 'success' ? 'green' : 'red') + '" size="sm">' + r.status + '</cds-tag></cds-table-cell>' +
+      '<cds-table-cell><cds-tag type="' + (r.status === 'success' ? 'green' : 'red') + '" size="sm"' + (r.error_message ? ' title="' + r.error_message.replace(/"/g, '&quot;') + '"' : '') + '>' + r.status + '</cds-tag></cds-table-cell>' +
       '<cds-table-cell>' + (r.duration_ms != null ? r.duration_ms + 'ms' : '\u2014') + '</cds-table-cell>' +
       '<cds-table-cell>' + fmt(r.token_estimate) + '</cds-table-cell>' +
       '<cds-table-cell>' + relTime(r.called_at) + '</cds-table-cell>' +
