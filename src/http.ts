@@ -6,12 +6,6 @@ import { createServer } from "./server.js";
 import { config } from "./config.js";
 import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
-import {
-  exchangeCodeForToken,
-  revokeLinearToken,
-  getLinearOAuthStatus,
-} from "./lib/linear-oauth.js";
-
 const app = express();
 app.use(compression());
 app.use(express.json());
@@ -25,7 +19,7 @@ h1{font-size:1.5rem}code{background:#f0f0f0;padding:2px 6px;border-radius:3px;fo
 li{margin:8px 0}.muted{color:#888;font-size:0.85rem}</style></head>
 <body>
 <h1>Robin MCP Server</h1>
-<p>A personal <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server with tools for notes, bookmarks, Linear issues, GitHub repos, and creative writing resources.</p>
+<p>A personal <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server with tools for notes, bookmarks, GitHub repos, and creative writing resources.</p>
 <h3>Connect</h3>
 <ul>
 <li><strong>MCP endpoint:</strong> <code>/mcp</code></li>
@@ -171,92 +165,6 @@ app.all("/mcp", async (req, res) => {
   }
 
   res.status(405).json({ error: "Method not allowed" });
-});
-
-// --- Linear OAuth routes ---
-
-const LINEAR_AUTHORIZE_URL = "https://linear.app/oauth/authorize";
-
-// CSRF state store with 10-minute TTL
-const oauthStates = new Map<string, number>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [state, created] of oauthStates) {
-    if (now - created > 10 * 60 * 1000) oauthStates.delete(state);
-  }
-}, 60 * 1000);
-
-function getRedirectUri(req: express.Request): string {
-  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
-  return `${proto}://${host}/auth/linear/callback`;
-}
-
-// Initiate OAuth flow
-app.get("/auth/linear", (req, res) => {
-  if (!config.linearClientId) {
-    res.status(500).send("LINEAR_CLIENT_ID not configured");
-    return;
-  }
-
-  const state = crypto.randomBytes(32).toString("hex");
-  oauthStates.set(state, Date.now());
-
-  const params = new URLSearchParams({
-    client_id: config.linearClientId,
-    redirect_uri: getRedirectUri(req),
-    response_type: "code",
-    state,
-    scope: "read,write",
-    prompt: "consent",
-  });
-
-  res.redirect(`${LINEAR_AUTHORIZE_URL}?${params}`);
-});
-
-// OAuth callback
-app.get("/auth/linear/callback", async (req, res) => {
-  const { code, state, error } = req.query as Record<string, string>;
-
-  if (error) {
-    res.status(400).send(`OAuth error: ${error}`);
-    return;
-  }
-
-  if (!state || !oauthStates.has(state)) {
-    res.status(400).send("Invalid or expired state parameter. Please try again from /auth/linear");
-    return;
-  }
-  oauthStates.delete(state);
-
-  if (!code) {
-    res.status(400).send("Missing authorization code");
-    return;
-  }
-
-  try {
-    await exchangeCodeForToken(code, getRedirectUri(req));
-    res.redirect("/dashboard");
-  } catch (err) {
-    console.error("[auth/linear] Token exchange failed:", err);
-    res.status(500).send(`Token exchange failed: ${err instanceof Error ? err.message : err}`);
-  }
-});
-
-// OAuth status check
-app.get("/auth/linear/status", (_req, res) => {
-  res.json(getLinearOAuthStatus());
-});
-
-// Disconnect Linear
-app.post("/auth/linear/disconnect", async (_req, res) => {
-  try {
-    await revokeLinearToken();
-    res.json({ disconnected: true });
-  } catch (err) {
-    console.error("[auth/linear] Disconnect failed:", err);
-    res.status(500).json({ error: "Disconnect failed" });
-  }
 });
 
 // Dashboard UI and API

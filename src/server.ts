@@ -3,7 +3,6 @@ import { registerNoteTools } from "./tools/notes.js";
 import { registerBookmarkTools } from "./tools/bookmarks.js";
 import { registerApiGatewayTools } from "./tools/api-gateway.js";
 import { registerVaultTools } from "./tools/vault.js";
-import { registerLinearTools } from "./tools/linear.js";
 import { registerSourceTools } from "./tools/sources.js";
 import { registerWritingsResources } from "./resources/writings.js";
 import { registerKnowledgeBaseResources } from "./resources/knowledge-base.js";
@@ -25,7 +24,6 @@ export async function createServer(options?: { readOnly?: boolean }): Promise<Mc
   registerBookmarkTools(server, readOnly);
   registerApiGatewayTools(server);
   registerVaultTools(server);
-  registerLinearTools(server, readOnly);
   registerSourceTools(server, readOnly);
 
   // Register native resources

@@ -190,16 +190,6 @@ export class AdapterRegistry {
       const toolNames = tools.map((t) => `${prefix}${t.name}`).join(",");
 
       upsertSource.run(
-        "gdocs-work",
-        "Google Workspace (Work)",
-        "Google Docs & Drive for robin@knapsack.cloud. Use account parameter 'robin@knapsack.cloud' with gdocs-* tools. Contains Knapsack work docs, meeting notes, and professional content.",
-        toolNames, "",
-        "Google Workspace (Work)",
-        "Google Docs & Drive for robin@knapsack.cloud. Use account parameter 'robin@knapsack.cloud' with gdocs-* tools. Contains Knapsack work docs, meeting notes, and professional content.",
-        toolNames, "",
-      );
-
-      upsertSource.run(
         "gdocs-personal",
         "Google Workspace (Personal)",
         "Google Docs & Drive for robin.cannon@gmail.com. Use account parameter 'robin.cannon@gmail.com' with gdocs-* tools. Contains personal docs, creative writing drafts, and mixed-use content.",
@@ -209,22 +199,13 @@ export class AdapterRegistry {
         toolNames, "",
       );
 
-      // Routing rules for work account
-      ensureRule("product-and-project-strategy", "gdocs-work", "Work Google Docs may contain meeting notes and project docs (use account: robin@knapsack.cloud)");
-      ensureRule("code", "gdocs-work", "Work Google Docs may contain technical specs and design docs (use account: robin@knapsack.cloud)");
-
       // Routing rules for personal account
       ensureRule("creative-writing", "gdocs-personal", "Personal Google Docs may contain writing drafts (use account: robin.cannon@gmail.com)");
       ensureRule("research", "gdocs-personal", "Personal Google Docs may contain research notes (use account: robin.cannon@gmail.com)");
       ensureRule("general", "gdocs-personal", "Personal Google Docs for general documents (use account: robin.cannon@gmail.com)");
     }
 
-    // Routing rules for Notion adapters
-    if (this.adapters.some((a) => a.config.id === "notion-work" && a.config.enabled)) {
-      ensureRule("product-and-project-strategy", "notion-work", "Work Notion contains project docs, specs, and team knowledge base");
-      ensureRule("code", "notion-work", "Work Notion may contain technical specs, architecture docs, and engineering decisions");
-    }
-
+    // Routing rules for Notion adapter
     if (this.adapters.some((a) => a.config.id === "notion-personal" && a.config.enabled)) {
       ensureRule("creative-writing", "notion-personal", "Personal Notion contains fiction planning, world-building notes, and writing drafts");
       ensureRule("static-drift", "notion-personal", "Personal Notion may contain Static Drift planning and story notes");
@@ -323,24 +304,6 @@ export function getAdapterRegistry(): AdapterRegistry {
         command: config.notionMcpCommand,
         args: notionArgs,
         env: { NOTION_TOKEN: config.notionTokenPersonal },
-        toolFilter: notionToolFilter,
-      }),
-    );
-  }
-
-  if (config.notionMcpCommand && config.notionTokenWork) {
-    registryInstance.addAdapter(
-      new McpProxyAdapter({
-        id: "notion-work",
-        name: "Notion (Work)",
-        prefix: "notion-work-",
-        type: "mcp-proxy",
-        transport: "stdio",
-        description: "Knapsack work Notion workspace — project docs, specs, and team knowledge",
-        enabled: true,
-        command: config.notionMcpCommand,
-        args: notionArgs,
-        env: { NOTION_TOKEN: config.notionTokenWork },
         toolFilter: notionToolFilter,
       }),
     );

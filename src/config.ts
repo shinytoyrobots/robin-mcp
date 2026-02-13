@@ -11,8 +11,6 @@ export const config = {
   rssFeedUrl: process.env.RSS_FEED_URL || "",
   linkedinUrl: process.env.LINKEDIN_URL || "",
   githubToken: process.env.GITHUB_TOKEN || "",
-  linearClientId: process.env.LINEAR_CLIENT_ID || "",
-  linearClientSecret: process.env.LINEAR_CLIENT_SECRET || "",
   vaultRepo: process.env.VAULT_REPO || "",
   httpPort: parseInt(process.env.HTTP_PORT || "3001", 10),
   authToken: process.env.AUTH_TOKEN || "",
@@ -26,7 +24,6 @@ export const config = {
   // Notion adapter (stdio via @notionhq/notion-mcp-server)
   notionMcpCommand: process.env.NOTION_MCP_COMMAND || "",
   notionTokenPersonal: process.env.NOTION_TOKEN_PERSONAL || "",
-  notionTokenWork: process.env.NOTION_TOKEN_WORK || "",
 
   // Toby adapter (HTTP, for later)
   tobyMcpUrl: process.env.TOBY_MCP_URL || "",

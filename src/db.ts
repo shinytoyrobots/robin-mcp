@@ -197,7 +197,7 @@ function seedDefaultContexts(db: Database.Database): void {
   const insert = db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)");
   const seed = db.transaction(() => {
     insert.run("code", "Context for writing, reviewing, or analyzing application code and engineering topics");
-    insert.run("product-and-project-strategy", "Product strategy, vision documents, roadmaps, and project tracking via Linear, Notion, and Google Docs");
+    insert.run("product-and-project-strategy", "Product strategy, vision documents, roadmaps, and project tracking via Notion and Google Docs");
     insert.run("creative-writing", "Fiction writing, story development, and creative composition");
     insert.run("static-drift", "The Static Drift speculative fiction universe — worldbuilding, stories, and lore");
     insert.run("personal-brand", "Public web presence, published writing, and professional profile");
@@ -254,7 +254,7 @@ function migrateRenameProjectManagementContextV1(db: Database.Database): void {
   const migrate = db.transaction(() => {
     db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)").run(
       "product-and-project-strategy",
-      "Product strategy, vision documents, roadmaps, and project tracking via Linear, Notion, and Google Docs"
+      "Product strategy, vision documents, roadmaps, and project tracking via Notion and Google Docs"
     );
     db.prepare("UPDATE source_rules SET context = 'product-and-project-strategy' WHERE context = 'project-management'").run();
     db.prepare("DELETE FROM contexts WHERE name = 'project-management'").run();
@@ -281,7 +281,6 @@ function seedDefaultSources(db: Database.Database): void {
     insertSource.run("writings", "Personal Writings", "robin-cannon.com (Substack) — website, blog posts, LinkedIn profile, and writing sections (Shiny Toy Robots, Alternate Frequencies)", "", "robin://writings/website,robin://writings/blog-posts,robin://writings/linkedin,robin://writings/shiny-toy-robots,robin://writings/alternate-frequencies");
     insertSource.run("github", "GitHub", "GitHub repo search and API access", "github-search-repos,http-fetch", "");
     insertSource.run("vault", "Creative Vault", "StaticDrift fiction universe - private creative writing repo", "vault-read-file,vault-list-dir", "robin://vault/structure");
-    insertSource.run("linear", "Linear", "Project management - issues, teams, assignments", "linear-search-issues,linear-get-issue,linear-my-issues,linear-create-issue", "robin://linear/teams");
 
     // Contextual rules (priority: 1 = most preferred)
     // Code & engineering
@@ -289,9 +288,8 @@ function seedDefaultSources(db: Database.Database): void {
     insertRule.run("code", "kb-bookmarks", 2, "Bookmarks may contain saved technical references");
     insertRule.run("code", "kb-notes", 3, "Notes may contain code snippets or technical decisions");
 
-    // Project management & work
-    insertRule.run("product-and-project-strategy", "linear", 1, "Linear is the source of truth for issues, sprints, and team work");
-    insertRule.run("product-and-project-strategy", "kb-notes", 2, "Notes may contain meeting notes or project context");
+    // Product & project strategy
+    insertRule.run("product-and-project-strategy", "kb-notes", 1, "Notes may contain meeting notes or project context");
 
     // Writing & creative
     insertRule.run("creative-writing", "vault", 1, "The creative vault is the primary source for fiction and creative work");
@@ -315,7 +313,6 @@ function seedDefaultSources(db: Database.Database): void {
     // General / catch-all
     insertRule.run("general", "kb-notes", 1, "Notes are the most versatile knowledge store");
     insertRule.run("general", "kb-bookmarks", 2, "Bookmarks provide quick references");
-    insertRule.run("general", "linear", 3, "Linear provides work context");
   });
 
   seed();
