@@ -28,6 +28,10 @@ export function invalidateRoutingCache(): void {
   routingCacheText = null;
 }
 
+/** External sources (available via separate MCP servers) use 'ext-' prefix. */
+const EXT_PREFIX = "ext-";
+const EXT_NOTE = "\n\nNote: Sources marked [External] are conditional — only reference them if you have a direct connection or integration. This server has no visibility into them.";
+
 function buildRoutingGuide(): string {
   const db = getDb();
 
@@ -71,13 +75,16 @@ function buildRoutingGuide(): string {
 
   text += "## Contextual Rules\n\n";
   text +=
-    "When handling a request, identify the context and follow the priority order below (1 = highest priority).\n\n";
+    "When handling a request, identify the context and follow the priority order below (1 = highest priority).\n";
+  text +=
+    "Sources marked [External] are conditional — only use them if you have direct access via a separate MCP server. This server has no visibility into them.\n\n";
   for (const [context, ctxRules] of contexts) {
     text += `### ${context}\n`;
     const desc = descMap.get(context);
     if (desc) text += `*${desc}*\n\n`;
     for (const r of ctxRules) {
-      text += `${r.priority}. **${r.source_name}** — ${r.reason}\n`;
+      const prefix = r.source_id.startsWith(EXT_PREFIX) ? "[External] " : "";
+      text += `${r.priority}. **${prefix}${r.source_name}** — ${r.reason}\n`;
     }
     text += "\n";
   }
@@ -112,12 +119,12 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
   // Tool: get routing recommendation for a context
   server.tool(
     "get-source-routing",
-    "Get the recommended sources and tools for a given context (e.g. 'code', 'product-and-project-strategy', 'creative-writing')",
+    "Get the recommended sources and tools for a given context (e.g. 'code', 'creative-writing', 'research')",
     {
       context: z
         .string()
         .describe(
-          "The context to get routing for, e.g. 'code', 'product-and-project-strategy', 'creative-writing', 'research', 'personal-brand', 'general'"
+          "The context to get routing for: 'code', 'product-and-project-strategy', 'creative-writing', 'static-drift', 'personal-brand', 'research', 'general'"
         ),
     },
     async ({ context }) => {
@@ -165,14 +172,17 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
         }
 
         const lines = general.map(
-          (r) =>
-            `${r.priority}. ${r.name}: ${r.reason}\n   Tools: ${r.tools || "none"} | Resources: ${r.resources || "none"}`
+          (r) => {
+            const prefix = r.source_id.startsWith(EXT_PREFIX) ? "[External] " : "";
+            return `${r.priority}. ${prefix}${r.name}: ${r.reason}\n   Tools: ${r.tools || "none"} | Resources: ${r.resources || "none"}`;
+          }
         );
+        const hasExternal = general.some((r) => r.source_id.startsWith(EXT_PREFIX));
         return {
           content: [
             {
               type: "text" as const,
-              text: `No specific rules for "${context}". Falling back to general routing:\n\n${lines.join("\n\n")}`,
+              text: `No specific rules for "${context}". Falling back to general routing:\n\n${lines.join("\n\n")}${hasExternal ? EXT_NOTE : ""}`,
             },
           ],
         };
@@ -180,15 +190,18 @@ export function registerSourceTools(server: McpServer, readOnly = false): void {
 
       const descLine = ctxDesc?.description ? `\n${ctxDesc.description}\n` : "";
       const lines = rules.map(
-        (r) =>
-          `${r.priority}. ${r.name}: ${r.reason}\n   Tools: ${r.tools || "none"} | Resources: ${r.resources || "none"}`
+        (r) => {
+          const prefix = r.source_id.startsWith(EXT_PREFIX) ? "[External] " : "";
+          return `${r.priority}. ${prefix}${r.name}: ${r.reason}\n   Tools: ${r.tools || "none"} | Resources: ${r.resources || "none"}`;
+        }
       );
 
+      const hasExternal = rules.some((r) => r.source_id.startsWith(EXT_PREFIX));
       return {
         content: [
           {
             type: "text" as const,
-            text: `Source routing for "${context}":${descLine}\n${lines.join("\n\n")}`,
+            text: `Source routing for "${context}":${descLine}\n${lines.join("\n\n")}${hasExternal ? EXT_NOTE : ""}`,
           },
         ],
       };

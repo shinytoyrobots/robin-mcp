@@ -109,6 +109,11 @@ function initSchema(db: Database.Database): void {
   migrateRemoveStaleSourcesV1(db);
   migrateWritingsDescriptionV1(db);
   migrateRenameProjectManagementContextV1(db);
+  migrateProductStrategyDescriptionV2(db);
+  migrateRemoveWorkSourcesV2(db);
+  migrateExternalHintSourcesToDbV3(db);
+  migrateExternalHintReasonsV4(db);
+  migrateRemoveOrphanGdocsSourceV5(db);
 
   // FTS5 virtual table for full-text search on notes
   const ftsExists = db
@@ -197,7 +202,7 @@ function seedDefaultContexts(db: Database.Database): void {
   const insert = db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)");
   const seed = db.transaction(() => {
     insert.run("code", "Context for writing, reviewing, or analyzing application code and engineering topics");
-    insert.run("product-and-project-strategy", "Product strategy, vision documents, roadmaps, and project tracking via Notion and Google Docs");
+    insert.run("product-and-project-strategy", "Product strategy, roadmaps, and project tracking — use external tools (Linear, work Notion) if available");
     insert.run("creative-writing", "Fiction writing, story development, and creative composition");
     insert.run("static-drift", "The Static Drift speculative fiction universe — worldbuilding, stories, and lore");
     insert.run("personal-brand", "Public web presence, published writing, and professional profile");
@@ -254,13 +259,179 @@ function migrateRenameProjectManagementContextV1(db: Database.Database): void {
   const migrate = db.transaction(() => {
     db.prepare("INSERT OR IGNORE INTO contexts (name, description) VALUES (?, ?)").run(
       "product-and-project-strategy",
-      "Product strategy, vision documents, roadmaps, and project tracking via Notion and Google Docs"
+      "Product strategy, roadmaps, and project tracking — use external tools (Linear, work Notion) if available"
     );
     db.prepare("UPDATE source_rules SET context = 'product-and-project-strategy' WHERE context = 'project-management'").run();
     db.prepare("DELETE FROM contexts WHERE name = 'project-management'").run();
   });
   migrate();
   console.error("[db] Renamed context: project-management → product-and-project-strategy");
+}
+
+function migrateProductStrategyDescriptionV2(db: Database.Database): void {
+  const staleDescs = [
+    "Product strategy, vision documents, roadmaps, and project tracking via Notion and Google Docs",
+    "Product strategy, vision documents, roadmaps, and project tracking via Linear, Notion, and Google Docs",
+  ];
+  const newDesc = "Product strategy, roadmaps, and project tracking — use external tools (Linear, work Notion) if available";
+  const row = db.prepare("SELECT description FROM contexts WHERE name = 'product-and-project-strategy'").get() as { description: string } | undefined;
+  if (!row || !staleDescs.includes(row.description)) return;
+  db.prepare("UPDATE contexts SET description = ? WHERE name = 'product-and-project-strategy'").run(newDesc);
+  console.error("[db] Updated product-and-project-strategy context description");
+}
+
+/**
+ * Remove work integration sources that are no longer provided by this server.
+ * Linear, Notion (Work), and Google Docs (Work) are now external hints only.
+ */
+function migrateRemoveWorkSourcesV2(db: Database.Database): void {
+  const staleIds = ["linear", "notion-work", "gdocs-work"];
+  const existing = db
+    .prepare(`SELECT id FROM sources WHERE id IN (${staleIds.map(() => "?").join(",")})`)
+    .all(...staleIds) as Array<{ id: string }>;
+
+  if (existing.length === 0) return;
+
+  const migrate = db.transaction(() => {
+    for (const { id } of existing) {
+      const contexts = db
+        .prepare("SELECT DISTINCT context FROM source_rules WHERE source_id = ?")
+        .all(id) as Array<{ context: string }>;
+
+      db.prepare("DELETE FROM source_rules WHERE source_id = ?").run(id);
+      db.prepare("DELETE FROM sources WHERE id = ?").run(id);
+
+      for (const { context } of contexts) {
+        compactPriorities(db, context);
+      }
+
+      console.error(`[db] Removed work source: ${id}`);
+    }
+  });
+  migrate();
+}
+
+/**
+ * Seed external tool hints as DB sources and routing rules.
+ * These represent tools available via separate MCP servers (Linear, work Notion, work GDocs).
+ * Source IDs use 'ext-' prefix so the UI can detect and tag them as [External].
+ * Also removes old non-prefixed work sources if migrateRemoveWorkSourcesV2 hasn't run yet.
+ */
+function migrateExternalHintSourcesToDbV3(db: Database.Database): void {
+  const extLinear = db.prepare("SELECT id FROM sources WHERE id = 'ext-linear'").get();
+  if (extLinear) return;
+
+  const migrate = db.transaction(() => {
+    // Remove old non-prefixed work sources (idempotent, in case V2 migration didn't run)
+    for (const id of ["linear", "notion-work", "gdocs-work"]) {
+      const affectedContexts = db
+        .prepare("SELECT DISTINCT context FROM source_rules WHERE source_id = ?")
+        .all(id) as Array<{ context: string }>;
+      db.prepare("DELETE FROM source_rules WHERE source_id = ?").run(id);
+      db.prepare("DELETE FROM sources WHERE id = ?").run(id);
+      for (const { context } of affectedContexts) {
+        compactPriorities(db, context);
+      }
+    }
+
+    // Create external sources
+    const insertSource = db.prepare(
+      "INSERT OR IGNORE INTO sources (id, name, description, tools, resources) VALUES (?, ?, ?, '', '')"
+    );
+    insertSource.run("ext-linear", "Linear", "Issues, sprints, and project tracking via separate MCP server");
+    insertSource.run("ext-notion-work", "Notion (Work)", "Work Notion workspace — project docs, specs, and team knowledge");
+    insertSource.run("ext-gdocs-work", "Google Docs (Work)", "Work Google Workspace — meeting notes and project docs");
+
+    // Insert rules at high priorities (will reorder below)
+    const insertRule = db.prepare(
+      "INSERT OR IGNORE INTO source_rules (context, source_id, priority, reason) VALUES (?, ?, ?, ?)"
+    );
+
+    // product-and-project-strategy: ext hints first (before kb-notes)
+    insertRule.run("product-and-project-strategy", "ext-linear", 100, "Check for issues, sprints, and project tracking");
+    insertRule.run("product-and-project-strategy", "ext-notion-work", 101, "Check for project docs, specs, and team knowledge base");
+    insertRule.run("product-and-project-strategy", "ext-gdocs-work", 102, "Check for meeting notes and project docs");
+
+    // code: ext hints after github
+    insertRule.run("code", "ext-linear", 100, "Check for engineering issues and tech specs");
+    insertRule.run("code", "ext-notion-work", 101, "Check for technical specs and architecture docs");
+    insertRule.run("code", "ext-gdocs-work", 102, "Check for technical specs and design docs");
+
+    // research: ext hints after DB rules
+    insertRule.run("research", "ext-notion-work", 100, "Check for research docs and references");
+    insertRule.run("research", "ext-gdocs-work", 101, "Check for research notes");
+
+    // general: ext hints after DB rules
+    insertRule.run("general", "ext-linear", 100, "Check for work context and project status");
+    insertRule.run("general", "ext-notion-work", 101, "Check for work docs and knowledge base");
+    insertRule.run("general", "ext-gdocs-work", 102, "Check for work docs and notes");
+
+    // Reorder each context to the desired final order
+    const reorder = (context: string, desiredOrder: string[]) => {
+      const rules = db.prepare(
+        "SELECT id, source_id FROM source_rules WHERE context = ? ORDER BY priority"
+      ).all(context) as Array<{ id: number; source_id: string }>;
+
+      const ordered: Array<{ id: number }> = [];
+      for (const sid of desiredOrder) {
+        const rule = rules.find(r => r.source_id === sid);
+        if (rule) ordered.push(rule);
+      }
+      // Append any remaining rules not in desired order
+      for (const rule of rules) {
+        if (!ordered.find(r => r.id === rule.id)) ordered.push(rule);
+      }
+
+      const setP = db.prepare("UPDATE source_rules SET priority = ? WHERE id = ?");
+      ordered.forEach((r, i) => setP.run(-(i + 1), r.id));
+      ordered.forEach((r, i) => setP.run(i + 1, r.id));
+    };
+
+    reorder("product-and-project-strategy", ["ext-linear", "ext-notion-work", "ext-gdocs-work", "kb-notes"]);
+    reorder("code", ["github", "ext-linear", "ext-notion-work", "ext-gdocs-work", "kb-bookmarks", "kb-notes"]);
+    reorder("research", ["kb-notes", "kb-bookmarks", "github", "ext-notion-work", "ext-gdocs-work"]);
+    reorder("general", ["kb-notes", "kb-bookmarks", "ext-linear", "ext-notion-work", "ext-gdocs-work"]);
+  });
+  migrate();
+  console.error("[db] Seeded external hint sources (ext-linear, ext-notion-work, ext-gdocs-work)");
+}
+
+/** Update external hint reason text to concise 'Check for...' form. */
+function migrateExternalHintReasonsV4(db: Database.Database): void {
+  // Check if any ext- rule still has the old verbose text
+  const sample = db.prepare(
+    "SELECT reason FROM source_rules WHERE source_id = 'ext-linear' AND context = 'code' LIMIT 1"
+  ).get() as { reason: string } | undefined;
+  if (!sample || sample.reason === "Check for engineering issues and tech specs") return;
+
+  const update = db.prepare("UPDATE source_rules SET reason = ? WHERE source_id = ? AND context = ?");
+  const migrate = db.transaction(() => {
+    update.run("Check for issues, sprints, and project tracking", "ext-linear", "product-and-project-strategy");
+    update.run("Check for project docs, specs, and team knowledge base", "ext-notion-work", "product-and-project-strategy");
+    update.run("Check for meeting notes and project docs", "ext-gdocs-work", "product-and-project-strategy");
+
+    update.run("Check for engineering issues and tech specs", "ext-linear", "code");
+    update.run("Check for technical specs and architecture docs", "ext-notion-work", "code");
+    update.run("Check for technical specs and design docs", "ext-gdocs-work", "code");
+
+    update.run("Check for research docs and references", "ext-notion-work", "research");
+    update.run("Check for research notes", "ext-gdocs-work", "research");
+
+    update.run("Check for work context and project status", "ext-linear", "general");
+    update.run("Check for work docs and knowledge base", "ext-notion-work", "general");
+    update.run("Check for work docs and notes", "ext-gdocs-work", "general");
+  });
+  migrate();
+  console.error("[db] Updated external hint reason text to concise form");
+}
+
+/** Remove orphan 'gdocs' source — routing uses per-account 'gdocs-personal' instead. */
+function migrateRemoveOrphanGdocsSourceV5(db: Database.Database): void {
+  const row = db.prepare("SELECT id FROM sources WHERE id = 'gdocs'").get();
+  if (!row) return;
+  db.prepare("DELETE FROM source_rules WHERE source_id = 'gdocs'").run();
+  db.prepare("DELETE FROM sources WHERE id = 'gdocs'").run();
+  console.error("[db] Removed orphan gdocs source (routing uses gdocs-personal)");
 }
 
 function seedDefaultSources(db: Database.Database): void {

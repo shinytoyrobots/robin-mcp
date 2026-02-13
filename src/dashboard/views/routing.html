@@ -81,6 +81,17 @@
     ></cds-inline-notification>
   </div>
 
+  <!-- External sources info -->
+  <div id="externalNotice" style="display:none;margin-bottom:1rem">
+    <cds-inline-notification
+      kind="info"
+      title="External sources"
+      subtitle="Sources tagged External are conditional — they are only referenced if your model has direct access to them via a separate MCP server or integration. This server has no independent visibility into them."
+      low-contrast
+      hide-close-button
+    ></cds-inline-notification>
+  </div>
+
   <!-- Preview Routing -->
   <div class="preview-section">
     <cds-tile>
@@ -210,6 +221,10 @@ async function loadRules() {
   currentContexts = data.contexts || {};
   currentDescriptions = data.contextDescriptions || {};
 
+  // Show external notice if any rules are external
+  const hasExternal = Object.values(currentContexts).some(rules => rules.some(r => r.isExternal));
+  document.getElementById('externalNotice').style.display = hasExternal ? 'block' : 'none';
+
   // Populate source dropdown
   const sel = document.getElementById('modalSource');
   sel.innerHTML = sources.map(s =>
@@ -256,8 +271,9 @@ async function loadRules() {
     html += '<cds-structured-list-body>';
 
     rules.forEach((r, idx) => {
+      const ext = r.isExternal;
       html += '<cds-structured-list-row>' +
-        '<cds-structured-list-cell><cds-tag type="blue" size="sm">' + r.priority + '</cds-tag></cds-structured-list-cell>';
+        '<cds-structured-list-cell><cds-tag type="' + (ext ? 'cool-gray' : 'blue') + '" size="sm">' + r.priority + '</cds-tag></cds-structured-list-cell>';
 
       if (!isReadonly) {
         html += '<cds-structured-list-cell><div class="reorder-btns">' +
@@ -266,7 +282,8 @@ async function loadRules() {
         '</div></cds-structured-list-cell>';
       }
 
-      html += '<cds-structured-list-cell><span class="rule-source">' + escHtml(r.source_name) + '</span></cds-structured-list-cell>' +
+      const sourceLabel = ext ? '<cds-tag type="purple" size="sm" style="margin-right:0.4rem">External</cds-tag>' + escHtml(r.source_name) : escHtml(r.source_name);
+      html += '<cds-structured-list-cell><span class="rule-source">' + sourceLabel + '</span></cds-structured-list-cell>' +
         '<cds-structured-list-cell><span class="rule-reason">' + escHtml(r.reason) + '</span></cds-structured-list-cell>';
 
       if (!isReadonly) {
@@ -485,9 +502,11 @@ document.getElementById('previewBtn').addEventListener('click', async () => {
     (data.fallback ? '<div class="preview-fallback">No specific rules \u2014 falling back to "general"</div>' : '') +
     data.rules.map(r =>
       '<div class="preview-rule">' +
-        '<strong>' + r.priority + '.</strong> ' + escHtml(r.source_name) +
+        '<strong>' + r.priority + '.</strong> ' +
+        (r.isExternal ? '<cds-tag type="purple" size="sm" style="margin-right:0.3rem">External</cds-tag>' : '') +
+        escHtml(r.source_name) +
         ' \u2014 <span style="color:var(--cds-text-secondary,#c6c6c6)">' + escHtml(r.reason) + '</span>' +
-        (r.tools ? '<br><span style="font-size:.78rem;color:var(--cds-text-helper,#8d8d8d)">Tools: ' + escHtml(r.tools) + '</span>' : '') +
+        (r.tools && !r.isExternal ? '<br><span style="font-size:.78rem;color:var(--cds-text-helper,#8d8d8d)">Tools: ' + escHtml(r.tools) + '</span>' : '') +
       '</div>'
     ).join('');
 });

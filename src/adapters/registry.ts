@@ -157,8 +157,12 @@ export class AdapterRegistry {
       }
     };
 
+    // Adapters with per-account logical sources (gdocs) are registered separately below
+    const skipGenericRegistration = new Set(["gdocs"]);
+
     for (const adapter of this.adapters) {
       if (!adapter.config.enabled) continue;
+      if (skipGenericRegistration.has(adapter.config.id)) continue;
 
       const tools = adapter.getTools();
       const resources = adapter.getResources();

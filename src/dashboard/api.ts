@@ -188,6 +188,7 @@ export function createApiRouter(
         source_name: string;
         priority: number;
         reason: string;
+        isExternal: boolean;
       }>
     > = {};
     for (const rule of rules) {
@@ -198,6 +199,7 @@ export function createApiRouter(
         source_name: rule.source_name,
         priority: rule.priority,
         reason: rule.reason,
+        isExternal: rule.source_id.startsWith("ext-"),
       });
     }
 
@@ -442,6 +444,7 @@ export function createApiRouter(
         reason: r.reason,
         tools: r.tools,
         resources: r.resources,
+        isExternal: r.source_id.startsWith("ext-"),
       })),
     });
   });
