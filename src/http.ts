@@ -78,20 +78,20 @@ app.use("/mcp", (req, res, next) => {
   res.status(401).json({ error: "Unauthorized" });
 });
 
-// Session management: map session IDs to transports with creation time
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+// Session management: map session IDs to transports with last activity time
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes of inactivity
 const SESSION_SWEEP_MS = 5 * 60 * 1000; // sweep every 5 minutes
 
 const sessions = new Map<
   string,
-  { transport: StreamableHTTPServerTransport; createdAt: number }
+  { transport: StreamableHTTPServerTransport; lastUsedAt: number }
 >();
 
 // Periodic sweep of stale sessions
 setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) {
-    if (now - session.createdAt > SESSION_TTL_MS) {
+    if (now - session.lastUsedAt > SESSION_TTL_MS) {
       sessions.delete(id);
       console.log(`Session expired: ${id}`);
     }
@@ -107,7 +107,7 @@ app.all("/mcp", async (req, res) => {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (id) => {
-          sessions.set(id, { transport, createdAt: Date.now() });
+          sessions.set(id, { transport, lastUsedAt: Date.now() });
           console.log(`Session created: ${id}`);
         },
       });
@@ -131,6 +131,7 @@ app.all("/mcp", async (req, res) => {
       res.status(404).json({ error: "Session not found" });
       return;
     }
+    session.lastUsedAt = Date.now();
     await session.transport.handleRequest(req, res, req.body);
     return;
   }
@@ -145,6 +146,7 @@ app.all("/mcp", async (req, res) => {
       res.status(404).json({ error: "Session not found" });
       return;
     }
+    session.lastUsedAt = Date.now();
     await session.transport.handleRequest(req, res);
     return;
   }
