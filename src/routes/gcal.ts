@@ -39,33 +39,50 @@ async function getAccessToken(): Promise<string> {
   return tokenCache.accessToken;
 }
 
-type CalendarListItem = {
-  id: string;
-  summary: string;
-  hidden?: boolean;
+const ALLOWED_CALENDARS = [
+  "robin@knapsack.cloud",
+  "robin.cannon@gmail.com",
+  "family10988690493973800187@group.calendar.google.com",
+  "kimm.hopson@gmail.com",
+];
+const KIM_CALENDAR_ID = "kimm.hopson@gmail.com";
+const ROBIN_CALENDARS = ALLOWED_CALENDARS.filter((id) => id !== KIM_CALENDAR_ID);
+
+type GCalEvent = {
+  summary?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  status?: string;
+  organizer?: { email?: string };
 };
+
+type SlimEvent = {
+  summary: string;
+  start: { dateTime?: string; date?: string };
+  end: { dateTime?: string; date?: string };
+  status: string;
+  organizer: string;
+  kimOnly?: true;
+  sharedWithKim?: true;
+};
+
+function slimEvent(ev: GCalEvent, extra?: Partial<SlimEvent>): SlimEvent {
+  return {
+    summary: ev.summary || "(no title)",
+    start: ev.start || {},
+    end: ev.end || {},
+    status: ev.status || "confirmed",
+    organizer: ev.organizer?.email || "",
+    ...extra,
+  };
+}
+
+function eventKey(ev: GCalEvent): string {
+  return `${ev.summary || ""}|${ev.start?.dateTime || ev.start?.date || ""}`;
+}
 
 export function createGcalRouter(): Router {
   const router = Router();
-
-  router.get("/calendars", async (_req, res) => {
-    try {
-      const token = await getAccessToken();
-      const gcalRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!gcalRes.ok) {
-        const err = await gcalRes.text();
-        res.status(gcalRes.status).json({ error: err });
-        return;
-      }
-      const data = (await gcalRes.json()) as { items: unknown[] };
-      res.json({ calendars: data.items });
-    } catch (err) {
-      console.error("gcal/calendars error:", err);
-      res.status(500).json({ error: "Internal error" });
-    }
-  });
 
   router.get("/events", async (req, res) => {
     try {
@@ -77,32 +94,51 @@ export function createGcalRouter(): Router {
       const calId = req.query.cal as string | undefined;
 
       if (calId === "all") {
-        const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!listRes.ok) {
-          const err = await listRes.text();
-          res.status(listRes.status).json({ error: err });
-          return;
-        }
-        const listData = (await listRes.json()) as { items: CalendarListItem[] };
-        const calendars = listData.items.filter((c) => !c.hidden);
-
-        const allEvents: unknown[] = [];
+        const calendarEvents = new Map<string, GCalEvent[]>();
         await Promise.all(
-          calendars.map(async (cal) => {
+          ALLOWED_CALENDARS.map(async (id) => {
             const evRes = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?` +
+              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?` +
                 new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime" }),
               { headers: { Authorization: `Bearer ${token}` } }
             );
             if (evRes.ok) {
-              const evData = (await evRes.json()) as { items: unknown[] };
-              allEvents.push(...(evData.items || []));
+              const evData = (await evRes.json()) as { items: GCalEvent[] };
+              calendarEvents.set(id, evData.items || []);
             }
           })
         );
-        res.json({ events: allEvents });
+
+        const kimKeys = new Set(
+          (calendarEvents.get(KIM_CALENDAR_ID) || []).map(eventKey)
+        );
+
+        const result: SlimEvent[] = [];
+        const seen = new Set<string>();
+
+        for (const id of ROBIN_CALENDARS) {
+          for (const ev of calendarEvents.get(id) || []) {
+            const key = eventKey(ev);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push(slimEvent(ev, kimKeys.has(key) ? { sharedWithKim: true } : undefined));
+          }
+        }
+
+        for (const ev of calendarEvents.get(KIM_CALENDAR_ID) || []) {
+          const key = eventKey(ev);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          result.push(slimEvent(ev, { kimOnly: true }));
+        }
+
+        result.sort((a, b) => {
+          const aTime = a.start.dateTime || a.start.date || "";
+          const bTime = b.start.dateTime || b.start.date || "";
+          return aTime.localeCompare(bTime);
+        });
+
+        res.json({ events: result });
       } else {
         const targetCal = calId || "primary";
         const evRes = await fetch(
@@ -115,8 +151,8 @@ export function createGcalRouter(): Router {
           res.status(evRes.status).json({ error: err });
           return;
         }
-        const evData = (await evRes.json()) as { items: unknown[] };
-        res.json({ events: evData.items });
+        const evData = (await evRes.json()) as { items: GCalEvent[] };
+        res.json({ events: (evData.items || []).map((ev) => slimEvent(ev)) });
       }
     } catch (err) {
       console.error("gcal/events error:", err);
