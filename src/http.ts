@@ -6,7 +6,7 @@ import { createServer } from "./server.js";
 import { config } from "./config.js";
 import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
-import { createGcalRouter } from "./routes/gcal.js";
+import { createGcalRouter, scheduleCalendarRefresh } from "./routes/gcal.js";
 const app = express();
 app.use(compression());
 app.use(express.json());
@@ -182,6 +182,9 @@ app.listen(config.httpPort, async () => {
   console.log(`robin-mcp HTTP server listening on port ${config.httpPort}`);
   console.log(`Endpoint: http://localhost:${config.httpPort}/mcp`);
   console.log(`Dashboard: http://localhost:${config.httpPort}/dashboard`);
+
+  // Pre-populate calendar cache and schedule daily 8am CT refresh
+  scheduleCalendarRefresh();
 
   // Prune old analytics data on startup
   try {

@@ -48,6 +48,8 @@ const ALLOWED_CALENDARS = [
 const KIM_CALENDAR_ID = "kimm.hopson@gmail.com";
 const ROBIN_CALENDARS = ALLOWED_CALENDARS.filter((id) => id !== KIM_CALENDAR_ID);
 
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 type GCalEvent = {
   summary?: string;
   start?: { dateTime?: string; date?: string };
@@ -66,6 +68,13 @@ type SlimEvent = {
   sharedWithKim?: true;
 };
 
+interface CalendarEventsCache {
+  events: SlimEvent[];
+  fetchedAt: number;
+}
+
+let calEventsCache: CalendarEventsCache | null = null;
+
 function slimEvent(ev: GCalEvent, extra?: Partial<SlimEvent>): SlimEvent {
   return {
     summary: ev.summary || "(no title)",
@@ -81,65 +90,113 @@ function eventKey(ev: GCalEvent): string {
   return `${ev.summary || ""}|${ev.start?.dateTime || ev.start?.date || ""}`;
 }
 
+async function fetchAllCalendarEvents(): Promise<SlimEvent[]> {
+  const token = await getAccessToken();
+  const now = new Date();
+  const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const timeMin = now.toISOString();
+  const timeMax = sevenDays.toISOString();
+
+  const calendarEvents = new Map<string, GCalEvent[]>();
+  await Promise.all(
+    ALLOWED_CALENDARS.map(async (id) => {
+      const evRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?` +
+          new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime" }),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (evRes.ok) {
+        const evData = (await evRes.json()) as { items: GCalEvent[] };
+        calendarEvents.set(id, evData.items || []);
+      }
+    })
+  );
+
+  const kimKeys = new Set(
+    (calendarEvents.get(KIM_CALENDAR_ID) || []).map(eventKey)
+  );
+
+  const result: SlimEvent[] = [];
+  const seen = new Set<string>();
+
+  for (const id of ROBIN_CALENDARS) {
+    for (const ev of calendarEvents.get(id) || []) {
+      const key = eventKey(ev);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(slimEvent(ev, kimKeys.has(key) ? { sharedWithKim: true } : undefined));
+    }
+  }
+
+  for (const ev of calendarEvents.get(KIM_CALENDAR_ID) || []) {
+    const key = eventKey(ev);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(slimEvent(ev, { kimOnly: true }));
+  }
+
+  result.sort((a, b) => {
+    const aTime = a.start.dateTime || a.start.date || "";
+    const bTime = b.start.dateTime || b.start.date || "";
+    return aTime.localeCompare(bTime);
+  });
+
+  calEventsCache = { events: result, fetchedAt: Date.now() };
+  console.error(`Calendar cache refreshed: ${result.length} events`);
+  return result;
+}
+
+function msUntilNext8amCentral(): number {
+  const now = new Date();
+  // Express now in CT as a "fake local" date — arithmetic gives correct UTC duration
+  const ctNow = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+  const ct8am = new Date(ctNow);
+  ct8am.setHours(8, 0, 0, 0);
+  if (ctNow >= ct8am) ct8am.setDate(ct8am.getDate() + 1);
+  return ct8am.getTime() - ctNow.getTime();
+}
+
+export function scheduleCalendarRefresh(): void {
+  // Warm the cache immediately on startup
+  fetchAllCalendarEvents().catch((err) =>
+    console.error("Initial calendar cache fetch failed:", err)
+  );
+
+  function scheduleNext() {
+    const ms = msUntilNext8amCentral();
+    console.error(`Next calendar cache refresh in ${Math.round(ms / 60_000)} minutes (8am CT)`);
+    setTimeout(async () => {
+      try {
+        await fetchAllCalendarEvents();
+      } catch (err) {
+        console.error("Scheduled calendar cache refresh failed:", err);
+      }
+      scheduleNext();
+    }, ms);
+  }
+  scheduleNext();
+}
+
 export function createGcalRouter(): Router {
   const router = Router();
 
   router.get("/events", async (req, res) => {
     try {
-      const token = await getAccessToken();
-      const now = new Date();
-      const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const timeMin = now.toISOString();
-      const timeMax = sevenDays.toISOString();
       const calId = req.query.cal as string | undefined;
 
       if (calId === "all") {
-        const calendarEvents = new Map<string, GCalEvent[]>();
-        await Promise.all(
-          ALLOWED_CALENDARS.map(async (id) => {
-            const evRes = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?` +
-                new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime" }),
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (evRes.ok) {
-              const evData = (await evRes.json()) as { items: GCalEvent[] };
-              calendarEvents.set(id, evData.items || []);
-            }
-          })
-        );
-
-        const kimKeys = new Set(
-          (calendarEvents.get(KIM_CALENDAR_ID) || []).map(eventKey)
-        );
-
-        const result: SlimEvent[] = [];
-        const seen = new Set<string>();
-
-        for (const id of ROBIN_CALENDARS) {
-          for (const ev of calendarEvents.get(id) || []) {
-            const key = eventKey(ev);
-            if (seen.has(key)) continue;
-            seen.add(key);
-            result.push(slimEvent(ev, kimKeys.has(key) ? { sharedWithKim: true } : undefined));
-          }
+        if (calEventsCache && Date.now() - calEventsCache.fetchedAt < CACHE_TTL_MS) {
+          res.json({ events: calEventsCache.events });
+          return;
         }
-
-        for (const ev of calendarEvents.get(KIM_CALENDAR_ID) || []) {
-          const key = eventKey(ev);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          result.push(slimEvent(ev, { kimOnly: true }));
-        }
-
-        result.sort((a, b) => {
-          const aTime = a.start.dateTime || a.start.date || "";
-          const bTime = b.start.dateTime || b.start.date || "";
-          return aTime.localeCompare(bTime);
-        });
-
-        res.json({ events: result });
+        const events = await fetchAllCalendarEvents();
+        res.json({ events });
       } else {
+        const token = await getAccessToken();
+        const now = new Date();
+        const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const timeMin = now.toISOString();
+        const timeMax = sevenDays.toISOString();
         const targetCal = calId || "primary";
         const evRes = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCal)}/events?` +
