@@ -6,6 +6,7 @@ import { createServer } from "./server.js";
 import { config } from "./config.js";
 import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
+import { createGcalRouter } from "./routes/gcal.js";
 const app = express();
 app.use(compression());
 app.use(express.json());
@@ -42,7 +43,7 @@ declare global {
   }
 }
 
-app.use("/mcp", (req, res, next) => {
+function mcpAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const queryToken = req.query.token as string | undefined;
   const bearerToken = req.headers.authorization;
   const cfAccess = req.headers["cf-access-authenticated-user-email"];
@@ -76,7 +77,9 @@ app.use("/mcp", (req, res, next) => {
   }
 
   res.status(401).json({ error: "Unauthorized" });
-});
+}
+
+app.use("/mcp", mcpAuthMiddleware);
 
 // Session management: map session IDs to transports with last activity time
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes of inactivity
@@ -171,6 +174,9 @@ app.all("/mcp", async (req, res) => {
 
 // Dashboard UI and API
 app.use("/dashboard", createDashboardRouter(sessions));
+
+// Google Calendar proxy (read-only, next 7 days)
+app.use("/gcal", mcpAuthMiddleware, createGcalRouter());
 
 app.listen(config.httpPort, async () => {
   console.log(`robin-mcp HTTP server listening on port ${config.httpPort}`);

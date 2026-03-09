@@ -20,6 +20,7 @@ export const config = {
   googleMcpCommand: process.env.GOOGLE_MCP_COMMAND || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+  googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN || "",
 
   // Notion adapter (stdio via @notionhq/notion-mcp-server)
   notionMcpCommand: process.env.NOTION_MCP_COMMAND || "",
