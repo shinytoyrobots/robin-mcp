@@ -8,7 +8,12 @@ import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
 import { createGcalRouter, scheduleCalendarRefresh } from "./routes/gcal.js";
 const app = express();
-app.use(compression());
+// Skip compression for MCP endpoint — compression buffers SSE chunks,
+// delaying event delivery and causing clients to think the connection dropped.
+app.use((req, res, next) => {
+  if (req.path === "/mcp") return next();
+  compression()(req, res, next);
+});
 app.use(express.json());
 
 // Landing page for browser visitors
@@ -90,12 +95,13 @@ const sessions = new Map<
   { transport: StreamableHTTPServerTransport; lastUsedAt: number }
 >();
 
-// Periodic sweep of stale sessions
+// Periodic sweep of stale sessions — close transport to release SSE connections
 setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) {
     if (now - session.lastUsedAt > SESSION_TTL_MS) {
       sessions.delete(id);
+      session.transport.close().catch(() => {});
       console.log(`Session expired: ${id}`);
     }
   }
@@ -104,72 +110,79 @@ setInterval(() => {
 app.all("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-  if (req.method === "POST") {
-    // Check if this is an initialization request (no session ID)
-    if (!sessionId) {
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        onsessioninitialized: (id) => {
-          sessions.set(id, { transport, lastUsedAt: Date.now() });
-          console.log(`Session created: ${id}`);
-        },
-      });
+  try {
+    if (req.method === "POST") {
+      // Check if this is an initialization request (no session ID)
+      if (!sessionId) {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => crypto.randomUUID(),
+          onsessioninitialized: (id) => {
+            sessions.set(id, { transport, lastUsedAt: Date.now() });
+            console.log(`Session created: ${id}`);
+          },
+        });
 
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          sessions.delete(transport.sessionId);
-          console.log(`Session closed: ${transport.sessionId}`);
-        }
-      };
+        transport.onclose = () => {
+          if (transport.sessionId) {
+            sessions.delete(transport.sessionId);
+            console.log(`Session closed: ${transport.sessionId}`);
+          }
+        };
 
-      const server = await createServer({ readOnly: req.readOnly });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
+        const server = await createServer({ readOnly: req.readOnly });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      // Existing session
+      const session = sessions.get(sessionId);
+      if (!session) {
+        res.status(404).json({ error: "Session not found" });
+        return;
+      }
+      session.lastUsedAt = Date.now();
+      await session.transport.handleRequest(req, res, req.body);
       return;
     }
 
-    // Existing session
-    const session = sessions.get(sessionId);
-    if (!session) {
-      res.status(404).json({ error: "Session not found" });
+    if (req.method === "GET") {
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing mcp-session-id header" });
+        return;
+      }
+      const session = sessions.get(sessionId);
+      if (!session) {
+        res.status(404).json({ error: "Session not found" });
+        return;
+      }
+      session.lastUsedAt = Date.now();
+      await session.transport.handleRequest(req, res);
       return;
     }
-    session.lastUsedAt = Date.now();
-    await session.transport.handleRequest(req, res, req.body);
-    return;
+
+    if (req.method === "DELETE") {
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing mcp-session-id header" });
+        return;
+      }
+      const session = sessions.get(sessionId);
+      if (!session) {
+        res.status(404).json({ error: "Session not found" });
+        return;
+      }
+      await session.transport.handleRequest(req, res);
+      sessions.delete(sessionId);
+      return;
+    }
+
+    res.status(405).json({ error: "Method not allowed" });
+  } catch (err) {
+    console.error(`MCP handler error (session=${sessionId ?? "new"}):`, err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
-
-  if (req.method === "GET") {
-    if (!sessionId) {
-      res.status(400).json({ error: "Missing mcp-session-id header" });
-      return;
-    }
-    const session = sessions.get(sessionId);
-    if (!session) {
-      res.status(404).json({ error: "Session not found" });
-      return;
-    }
-    session.lastUsedAt = Date.now();
-    await session.transport.handleRequest(req, res);
-    return;
-  }
-
-  if (req.method === "DELETE") {
-    if (!sessionId) {
-      res.status(400).json({ error: "Missing mcp-session-id header" });
-      return;
-    }
-    const session = sessions.get(sessionId);
-    if (!session) {
-      res.status(404).json({ error: "Session not found" });
-      return;
-    }
-    await session.transport.handleRequest(req, res);
-    sessions.delete(sessionId);
-    return;
-  }
-
-  res.status(405).json({ error: "Method not allowed" });
 });
 
 // Dashboard UI and API
