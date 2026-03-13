@@ -87,7 +87,7 @@ function mcpAuthMiddleware(req: express.Request, res: express.Response, next: ex
 app.use("/mcp", mcpAuthMiddleware);
 
 // Session management: map session IDs to transports with last activity time
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes of inactivity
+const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours of inactivity
 const SESSION_SWEEP_MS = 5 * 60 * 1000; // sweep every 5 minutes
 
 const sessions = new Map<
