@@ -9,7 +9,8 @@
     "dev:http": "tsx src/http.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/stdio.js",
     "start:stdio": "node dist/stdio.js",
-    "start:http": "node dist/http.js"
+    "start:http": "node dist/http.js",
+    "reauth:gcal": "tsx scripts/gcal-reauth.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
