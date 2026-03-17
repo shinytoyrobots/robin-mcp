@@ -2,10 +2,16 @@ import express from "express";
 import crypto from "crypto";
 import compression from "compression";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { createServer } from "./server.js";
 import { config } from "./config.js";
 import { createDashboardRouter } from "./dashboard/router.js";
 import { pruneOldAnalytics } from "./analytics/tracker.js";
+import { pruneExpiredOAuthData } from "./oauth/schema.js";
+import { getDb } from "./db.js";
+import { RobinOAuthProvider } from "./oauth/provider.js";
 import { createGcalRouter, scheduleCalendarRefresh } from "./routes/gcal.js";
 const app = express();
 // Skip compression for MCP endpoint — compression buffers SSE chunks,
@@ -36,10 +42,46 @@ li{margin:8px 0}.muted{color:#888;font-size:0.85rem}</style></head>
 </body></html>`);
 });
 
-// Auth middleware: determines access level and stores it on the request.
-// Full access: AUTH_TOKEN grants read+write.
-// Read-only: READONLY_TOKEN or Cloudflare Access grants read-only.
-// No token configured: open access (full).
+// ---------------------------------------------------------------------------
+// OAuth 2.1 setup
+// ---------------------------------------------------------------------------
+
+const issuerUrl = new URL(
+  config.oauthIssuerUrl || `http://localhost:${config.httpPort}`,
+);
+const resourceServerUrl = new URL("/mcp", issuerUrl);
+const oauthProvider = new RobinOAuthProvider();
+
+// Inject CF Access email into res.locals before the authorize handler
+app.use("/authorize", (req, res, next) => {
+  const cfEmail = (
+    req.headers["cf-access-authenticated-user-email"] as string | undefined
+  )?.toLowerCase();
+  if (cfEmail) res.locals.cfEmail = cfEmail;
+  next();
+});
+
+// Mount OAuth endpoints: /authorize, /token, /register, /revoke, /.well-known/*
+app.use(
+  mcpAuthRouter({
+    provider: oauthProvider,
+    issuerUrl,
+    scopesSupported: ["mcp:full", "mcp:read"],
+    resourceServerUrl,
+    resourceName: "Robin MCP",
+  }),
+);
+
+// Bearer auth middleware for OAuth tokens on /mcp
+const oauthBearerAuth = requireBearerAuth({
+  verifier: oauthProvider,
+  resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceServerUrl),
+});
+
+// ---------------------------------------------------------------------------
+// Auth middleware
+// ---------------------------------------------------------------------------
+
 declare global {
   namespace Express {
     interface Request {
@@ -49,48 +91,50 @@ declare global {
   }
 }
 
-function matchToken(req: express.Request, token: string): boolean {
+/**
+ * Legacy token auth for /gcal and backward compat.
+ * Checks query token, bearer token, and CF Access email allowlist.
+ */
+function legacyAuthMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
   const queryToken = req.query.token as string | undefined;
-  const bearerToken = req.headers.authorization;
-  return queryToken === token || bearerToken === `Bearer ${token}`;
-}
-
-function mcpAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
-  const cfEmail = (req.headers["cf-access-authenticated-user-email"] as string | undefined)?.toLowerCase();
+  const bearerToken = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice(7)
+    : undefined;
+  const cfEmail = (
+    req.headers["cf-access-authenticated-user-email"] as string | undefined
+  )?.toLowerCase();
 
   if (cfEmail) {
-    // CF Access present — enforce email allowlist
     if (!config.allowedEmails.includes(cfEmail)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
     req.cfEmail = cfEmail;
-
-    // Allowed email + AUTH_TOKEN → full access
-    if (config.authToken && matchToken(req, config.authToken)) {
+    if (config.authToken && (queryToken === config.authToken || bearerToken === config.authToken)) {
       req.readOnly = false;
       next();
       return;
     }
-    // Allowed email + READONLY_TOKEN or no token → read-only
     req.readOnly = true;
     next();
     return;
   }
 
-  // No CF Access header — direct/local access, authenticate by token only
-  if (config.authToken && matchToken(req, config.authToken)) {
+  if (config.authToken && (queryToken === config.authToken || bearerToken === config.authToken)) {
     req.readOnly = false;
     next();
     return;
   }
-  if (config.readonlyToken && matchToken(req, config.readonlyToken)) {
+  if (config.readonlyToken && (queryToken === config.readonlyToken || bearerToken === config.readonlyToken)) {
     req.readOnly = true;
     next();
     return;
   }
 
-  // No tokens configured = open full access (local dev)
   if (!config.authToken && !config.readonlyToken) {
     req.readOnly = false;
     next();
@@ -100,9 +144,70 @@ function mcpAuthMiddleware(req: express.Request, res: express.Response, next: ex
   res.status(401).json({ error: "Unauthorized" });
 }
 
+/**
+ * MCP endpoint auth: legacy tokens checked first, then OAuth bearer auth.
+ * If no credentials at all and tokens are configured, falls through to
+ * oauthBearerAuth which returns 401 with WWW-Authenticate discovery info.
+ */
+function mcpAuthMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  const queryToken = req.query.token as string | undefined;
+  const bearerToken = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice(7)
+    : undefined;
+
+  // Legacy: query param token
+  if (queryToken) {
+    if (config.authToken && queryToken === config.authToken) {
+      req.readOnly = false;
+      return next();
+    }
+    if (config.readonlyToken && queryToken === config.readonlyToken) {
+      req.readOnly = true;
+      return next();
+    }
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Legacy: bearer token matching configured env tokens
+  if (bearerToken) {
+    if (config.authToken && bearerToken === config.authToken) {
+      req.readOnly = false;
+      return next();
+    }
+    if (config.readonlyToken && bearerToken === config.readonlyToken) {
+      req.readOnly = true;
+      return next();
+    }
+    // Not a legacy token — try OAuth bearer validation
+    oauthBearerAuth(req, res, () => {
+      req.readOnly = !req.auth?.scopes.includes("mcp:full");
+      next();
+    });
+    return;
+  }
+
+  // No credentials at all
+  if (!config.authToken && !config.readonlyToken) {
+    // Local dev: open access
+    req.readOnly = false;
+    return next();
+  }
+
+  // Production with no credentials: return 401 with OAuth discovery headers
+  oauthBearerAuth(req, res, next);
+}
+
 app.use("/mcp", mcpAuthMiddleware);
 
-// Session management: map session IDs to transports with last activity time
+// ---------------------------------------------------------------------------
+// Session management
+// ---------------------------------------------------------------------------
+
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours of inactivity
 const SESSION_SWEEP_MS = 5 * 60 * 1000; // sweep every 5 minutes
 
@@ -205,7 +310,7 @@ app.all("/mcp", async (req, res) => {
 app.use("/dashboard", createDashboardRouter(sessions));
 
 // Google Calendar proxy (read-only, next 7 days)
-app.use("/gcal", mcpAuthMiddleware, createGcalRouter());
+app.use("/gcal", legacyAuthMiddleware, createGcalRouter());
 
 app.listen(config.httpPort, async () => {
   console.log(`robin-mcp HTTP server listening on port ${config.httpPort}`);
@@ -215,11 +320,12 @@ app.listen(config.httpPort, async () => {
   // Pre-populate calendar cache and schedule daily 8am CT refresh
   scheduleCalendarRefresh();
 
-  // Prune old analytics data on startup
+  // Prune old analytics and OAuth data on startup
   try {
     pruneOldAnalytics();
+    pruneExpiredOAuthData(getDb());
   } catch (err) {
-    console.error("Analytics pruning failed (non-fatal):", err);
+    console.error("Startup pruning failed (non-fatal):", err);
   }
 
   // Pre-initialize adapters in background so the first session isn't slow

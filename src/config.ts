@@ -38,6 +38,9 @@ export const config = {
   allowedEmails: (process.env.ALLOWED_EMAILS || process.env.DASHBOARD_ADMIN_EMAIL || "robin.cannon@gmail.com")
     .split(",").map(e => e.trim().toLowerCase()),
 
+  // OAuth 2.1 (empty = local dev mode, uses http://localhost:<port>)
+  oauthIssuerUrl: process.env.OAUTH_ISSUER_URL || "",
+
   // Dashboard
   adminEmail: process.env.DASHBOARD_ADMIN_EMAIL || "robin.cannon@gmail.com",
   analyticsRetentionDays: parseInt(process.env.ANALYTICS_RETENTION_DAYS || "90", 10),

@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { config } from "./config.js";
 import { initAnalyticsSchema } from "./analytics/schema.js";
+import { initOAuthSchema } from "./oauth/schema.js";
 
 let db: Database.Database;
 
@@ -103,6 +104,7 @@ function initSchema(db: Database.Database): void {
   migrateSourceRulesConstraint(db);
 
   initAnalyticsSchema(db);
+  initOAuthSchema(db);
 
   seedDefaultSources(db);
   seedDefaultContexts(db);
