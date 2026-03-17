@@ -34,6 +34,10 @@ export const config = {
   digestPipelineUrl: process.env.DIGEST_PIPELINE_URL || "",
   digestPipelineToken: process.env.DIGEST_PIPELINE_TOKEN || "",
 
+  // Access control
+  allowedEmails: (process.env.ALLOWED_EMAILS || process.env.DASHBOARD_ADMIN_EMAIL || "robin.cannon@gmail.com")
+    .split(",").map(e => e.trim().toLowerCase()),
+
   // Dashboard
   adminEmail: process.env.DASHBOARD_ADMIN_EMAIL || "robin.cannon@gmail.com",
   analyticsRetentionDays: parseInt(process.env.ANALYTICS_RETENTION_DAYS || "90", 10),

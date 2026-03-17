@@ -44,37 +44,53 @@ declare global {
   namespace Express {
     interface Request {
       readOnly?: boolean;
+      cfEmail?: string;
     }
   }
 }
 
-function mcpAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+function matchToken(req: express.Request, token: string): boolean {
   const queryToken = req.query.token as string | undefined;
   const bearerToken = req.headers.authorization;
-  const cfAccess = req.headers["cf-access-authenticated-user-email"];
+  return queryToken === token || bearerToken === `Bearer ${token}`;
+}
 
-  // Full access token
-  if (config.authToken && (queryToken === config.authToken || bearerToken === `Bearer ${config.authToken}`)) {
+function mcpAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const cfEmail = (req.headers["cf-access-authenticated-user-email"] as string | undefined)?.toLowerCase();
+
+  if (cfEmail) {
+    // CF Access present — enforce email allowlist
+    if (!config.allowedEmails.includes(cfEmail)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    req.cfEmail = cfEmail;
+
+    // Allowed email + AUTH_TOKEN → full access
+    if (config.authToken && matchToken(req, config.authToken)) {
+      req.readOnly = false;
+      next();
+      return;
+    }
+    // Allowed email + READONLY_TOKEN or no token → read-only
+    req.readOnly = true;
+    next();
+    return;
+  }
+
+  // No CF Access header — direct/local access, authenticate by token only
+  if (config.authToken && matchToken(req, config.authToken)) {
     req.readOnly = false;
     next();
     return;
   }
-
-  // Read-only token
-  if (config.readonlyToken && (queryToken === config.readonlyToken || bearerToken === `Bearer ${config.readonlyToken}`)) {
+  if (config.readonlyToken && matchToken(req, config.readonlyToken)) {
     req.readOnly = true;
     next();
     return;
   }
 
-  // Cloudflare Access (read-only for coworkers)
-  if (cfAccess) {
-    req.readOnly = true;
-    next();
-    return;
-  }
-
-  // No auth configured = open full access (local dev)
+  // No tokens configured = open full access (local dev)
   if (!config.authToken && !config.readonlyToken) {
     req.readOnly = false;
     next();
