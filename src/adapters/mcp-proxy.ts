@@ -98,7 +98,7 @@ export class McpProxyAdapter implements SourceAdapter {
     this.tools = (toolsResult.tools || []).map((t: Tool) => ({
       name: t.name,
       description: t.description || "",
-      inputSchema: t.inputSchema as Record<string, unknown>,
+      inputSchema: fixArraySchemas(t.inputSchema as Record<string, unknown>),
       isWrite: writeSet ? writeSet.has(t.name) : isWriteTool(t),
     }));
 
@@ -159,6 +159,34 @@ export class McpProxyAdapter implements SourceAdapter {
       console.error(`[adapter:${this.config.id}] Shut down`);
     }
   }
+}
+
+/**
+ * OpenAI (and other strict providers) reject array schemas without `items`.
+ * Some upstream MCP servers omit it. Walk the schema tree and patch any gaps.
+ */
+function fixArraySchemas(schema: Record<string, unknown>): Record<string, unknown> {
+  if (typeof schema !== "object" || schema === null) return schema;
+
+  const copy = { ...schema };
+  if (copy.type === "array" && !copy.items) {
+    copy.items = {};
+  }
+
+  if (typeof copy.properties === "object" && copy.properties !== null) {
+    const props = copy.properties as Record<string, Record<string, unknown>>;
+    const fixed: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(props)) {
+      fixed[key] = fixArraySchemas(val);
+    }
+    copy.properties = fixed;
+  }
+
+  if (typeof copy.items === "object" && copy.items !== null) {
+    copy.items = fixArraySchemas(copy.items as Record<string, unknown>);
+  }
+
+  return copy;
 }
 
 /**
